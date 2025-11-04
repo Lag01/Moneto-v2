@@ -142,9 +142,9 @@ export type PlanSyncStatus =
 export interface PlanSyncInfo {
   planId: string;
   status: PlanSyncStatus;
-  lastSyncAt?: Date;
-  cloudUpdatedAt?: Date;
-  localUpdatedAt?: Date;
+  lastSyncAt?: string;
+  cloudUpdatedAt?: string;
+  localUpdatedAt?: string;
   error?: string;
 }
 

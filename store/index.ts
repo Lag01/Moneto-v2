@@ -93,7 +93,7 @@ export interface UserSettings {
  */
 export interface SyncStatus {
   isSyncing: boolean;
-  lastSyncAt: Date | null;
+  lastSyncAt: string | null;
   error: string | null;
 }
 
@@ -640,7 +640,7 @@ export const useAppStore = create<AppState>()(
               monthlyPlans: result.plans,
               syncStatus: {
                 isSyncing: false,
-                lastSyncAt: new Date(),
+                lastSyncAt: new Date().toISOString(),
                 error: null,
               },
             });
@@ -725,7 +725,7 @@ export const useAppStore = create<AppState>()(
               monthlyPlans: [...state.monthlyPlans, ...cloudOnlyPlans],
               syncStatus: {
                 isSyncing: false,
-                lastSyncAt: new Date(),
+                lastSyncAt: new Date().toISOString(),
                 error: null,
               },
             }));
@@ -1010,8 +1010,8 @@ export const useAppStore = create<AppState>()(
               newSyncStatus[localPlan.id] = {
                 planId: localPlan.id,
                 status,
-                localUpdatedAt: new Date(localPlan.updatedAt),
-                cloudUpdatedAt: cloudMetadata ? new Date(cloudMetadata.updatedAt) : undefined,
+                localUpdatedAt: localPlan.updatedAt,
+                cloudUpdatedAt: cloudMetadata?.updatedAt,
               };
 
               // Retirer du map pour identifier les plans cloud-only
@@ -1025,7 +1025,7 @@ export const useAppStore = create<AppState>()(
               newSyncStatus[cloudPlan.planId] = {
                 planId: cloudPlan.planId,
                 status: 'cloud_only',
-                cloudUpdatedAt: new Date(cloudPlan.updatedAt),
+                cloudUpdatedAt: cloudPlan.updatedAt,
               };
             });
 
