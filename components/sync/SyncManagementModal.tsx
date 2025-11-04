@@ -28,27 +28,38 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
   const [success, setSuccess] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
+    if (!user) {
+      setError('Utilisateur non connecté');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
       // Rafraîchir le statut de sync
-      await refreshPlansSyncStatus();
+      if (refreshPlansSyncStatus) {
+        await refreshPlansSyncStatus();
+      }
 
       // Récupérer les métadonnées cloud
-      const result = await getCloudPlansMetadata();
-      if (result.success && result.plans) {
-        setCloudPlans(result.plans);
+      if (getCloudPlansMetadata) {
+        const result = await getCloudPlansMetadata();
+        if (result.success && result.plans) {
+          setCloudPlans(result.plans);
+        } else {
+          setError(result.error || 'Erreur lors du chargement des données cloud');
+        }
       } else {
-        setError(result.error || 'Erreur lors du chargement');
+        setError('Fonctionnalité de synchronisation non disponible');
       }
     } catch (err) {
       console.error('Erreur lors du chargement:', err);
-      setError('Erreur inattendue lors du chargement');
+      setError('Erreur inattendue lors du chargement. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
-  }, [refreshPlansSyncStatus, getCloudPlansMetadata]);
+  }, [refreshPlansSyncStatus, getCloudPlansMetadata, user]);
 
   // Charger les données au montage
   useEffect(() => {
@@ -59,6 +70,11 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
 
   const handleUploadSelected = async () => {
     if (selectedLocal.size === 0) return;
+
+    if (!uploadSelectedPlansToCloud) {
+      setError('Fonctionnalité d\'upload non disponible');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -76,7 +92,7 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
       }
     } catch (err) {
       console.error('Erreur upload:', err);
-      setError('Erreur inattendue lors de l\'upload');
+      setError('Erreur inattendue lors de l\'upload. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -84,6 +100,11 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
 
   const handleDownloadSelected = async () => {
     if (selectedCloud.size === 0) return;
+
+    if (!downloadSelectedPlansFromCloud) {
+      setError('Fonctionnalité de téléchargement non disponible');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -101,7 +122,7 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
       }
     } catch (err) {
       console.error('Erreur download:', err);
-      setError('Erreur inattendue lors du téléchargement');
+      setError('Erreur inattendue lors du téléchargement. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -109,6 +130,11 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
 
   const handleDeleteSelected = async () => {
     if (selectedCloud.size === 0) return;
+
+    if (!deleteSelectedPlansFromCloud) {
+      setError('Fonctionnalité de suppression non disponible');
+      return;
+    }
 
     const confirm = window.confirm(
       `Êtes-vous sûr de vouloir supprimer ${selectedCloud.size} plan(s) du cloud ?`
@@ -131,7 +157,7 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
       }
     } catch (err) {
       console.error('Erreur suppression:', err);
-      setError('Erreur inattendue lors de la suppression');
+      setError('Erreur inattendue lors de la suppression. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -146,21 +172,23 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
       // Uploader tous les plans non synchronisés
       const plansToUpload = monthlyPlans
         .filter((p) => {
-          const status = planSyncStatus[p.id]?.status;
+          const status = planSyncStatus?.[p.id]?.status;
           return status === 'not_synced' || status === 'local_newer';
         })
         .map((p) => p.id);
 
-      if (plansToUpload.length > 0) {
+      if (plansToUpload.length > 0 && uploadSelectedPlansToCloud) {
         await uploadSelectedPlansToCloud(plansToUpload);
       }
 
       // Télécharger tous les plans cloud-only
-      const cloudOnlyPlans = Object.values(planSyncStatus)
-        .filter((s) => s.status === 'cloud_only')
-        .map((s) => s.planId);
+      const cloudOnlyPlans = planSyncStatus
+        ? Object.values(planSyncStatus)
+            .filter((s) => s.status === 'cloud_only')
+            .map((s) => s.planId)
+        : [];
 
-      if (cloudOnlyPlans.length > 0) {
+      if (cloudOnlyPlans.length > 0 && downloadSelectedPlansFromCloud) {
         await downloadSelectedPlansFromCloud(cloudOnlyPlans);
       }
 
@@ -168,7 +196,7 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
       await loadData();
     } catch (err) {
       console.error('Erreur sync complète:', err);
-      setError('Erreur lors de la synchronisation');
+      setError('Erreur lors de la synchronisation. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -247,12 +275,12 @@ export default function SyncManagementModal({ isOpen, onClose }: SyncManagementM
   // Séparer les plans locaux selon leur statut
   const localPlansWithStatus = monthlyPlans.map((plan) => ({
     plan,
-    syncInfo: planSyncStatus[plan.id],
+    syncInfo: planSyncStatus?.[plan.id],
   }));
 
   // Identifier les plans cloud-only
   const cloudOnlyPlans = cloudPlans.filter((cloudPlan) => {
-    const status = planSyncStatus[cloudPlan.planId]?.status;
+    const status = planSyncStatus?.[cloudPlan.planId]?.status;
     return status === 'cloud_only';
   });
 
