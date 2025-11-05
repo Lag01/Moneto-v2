@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/layout-with-nav';
-import SyncButton from '@/components/sync/SyncButton';
+import SyncIndicator from '@/components/sync/SyncIndicator';
 import { formatDate } from '@/lib/financial';
 
 export default function ProfilePage() {
@@ -180,9 +180,9 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              {/* Bouton de synchronisation manuelle */}
+              {/* Indicateur de synchronisation */}
               <div className="pt-4">
-                <SyncButton variant="primary" size="md" showLabel={true} />
+                <SyncIndicator />
               </div>
             </div>
           </div>

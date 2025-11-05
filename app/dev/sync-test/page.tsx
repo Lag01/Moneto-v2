@@ -102,9 +102,7 @@ export default function SyncTestPage() {
     try {
       const startTime = performance.now();
 
-      const result = await syncAllPlans(monthlyPlans, user.id, (current, total) => {
-        addLog(`Progression: ${current}/${total} plans`, 'info');
-      });
+      const result = await syncAllPlans(monthlyPlans, user.id);
 
       const endTime = performance.now();
       const duration = endTime - startTime;

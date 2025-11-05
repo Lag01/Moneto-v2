@@ -5,11 +5,18 @@ import { useAppStore } from '@/store';
 export default function SyncIndicator() {
   const user = useAppStore((state) => state.user);
   const syncStatus = useAppStore((state) => state.syncStatus);
+  const syncWithCloud = useAppStore((state) => state.syncWithCloud);
 
   // Ne pas afficher si l'utilisateur n'est pas connecté
   if (!user) return null;
 
   const { isSyncing, lastSyncAt, error } = syncStatus;
+
+  const handleSync = () => {
+    if (!isSyncing) {
+      syncWithCloud();
+    }
+  };
 
   const getStatusIcon = () => {
     if (isSyncing) {
@@ -107,11 +114,29 @@ export default function SyncIndicator() {
   };
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-700/50 dark:bg-slate-800/50 rounded-lg">
+    <button
+      onClick={handleSync}
+      disabled={isSyncing}
+      className={`
+        flex items-center gap-2 px-3 py-1.5 rounded-lg
+        transition-all duration-200
+        ${
+          isSyncing
+            ? 'bg-blue-500/20 dark:bg-blue-500/10 cursor-wait'
+            : error
+            ? 'bg-red-500/20 dark:bg-red-500/10 hover:bg-red-500/30 dark:hover:bg-red-500/20'
+            : lastSyncAt
+            ? 'bg-emerald-500/20 dark:bg-emerald-500/10 hover:bg-emerald-500/30 dark:hover:bg-emerald-500/20'
+            : 'bg-slate-500/20 dark:bg-slate-500/10 hover:bg-slate-500/30 dark:hover:bg-slate-500/20'
+        }
+        disabled:cursor-not-allowed
+      `}
+      title={error ? error : 'Cliquez pour synchroniser'}
+    >
       {getStatusIcon()}
-      <span className="text-xs text-slate-300 dark:text-slate-400">
+      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
         {getStatusText()}
       </span>
-    </div>
+    </button>
   );
 }

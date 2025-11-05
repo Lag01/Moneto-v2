@@ -18,7 +18,6 @@ import { useTutorial } from '@/hooks/useTutorial';
 import TutorialWelcomeModal from '@/components/tutorial/TutorialWelcomeModal';
 import TutorialDisclaimerModal from '@/components/tutorial/TutorialDisclaimerModal';
 import LocalDataMigrationModal from '@/components/auth/LocalDataMigrationModal';
-import SyncManagementModal from '@/components/sync/SyncManagementModal';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -40,7 +39,6 @@ export default function DashboardPage() {
   const [showBetaWarning, setShowBetaWarning] = useState(true);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [showMigrationBanner, setShowMigrationBanner] = useState(true);
-  const [showSyncManagementModal, setShowSyncManagementModal] = useState(false);
 
   // Tutoriel
   const { showWelcomeModal, showDisclaimerModal, setShowWelcomeModal, startTutorial, startTutorialAfterDisclaimer } = useTutorialContext();
@@ -456,23 +454,6 @@ export default function DashboardPage() {
               className="hidden"
             />
 
-            {user && (
-              <button
-                onClick={() => setShowSyncManagementModal(true)}
-                className="px-4 md:px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                <span className="hidden sm:inline">Gérer la sync</span>
-                <span className="sm:hidden">Sync</span>
-              </button>
-            )}
           </div>
 
           {/* Liste des plans */}
@@ -616,11 +597,6 @@ export default function DashboardPage() {
         onClose={handleCloseMigrationModal}
       />
 
-      {/* Modal de gestion de synchronisation */}
-      <SyncManagementModal
-        isOpen={showSyncManagementModal}
-        onClose={() => setShowSyncManagementModal(false)}
-      />
     </LayoutWithNav>
   );
 }

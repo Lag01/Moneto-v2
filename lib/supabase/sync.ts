@@ -1,48 +1,6 @@
 import { supabase, isSupabaseConfigured } from './client';
 import type { MonthlyPlan } from '@/store';
 import { monthlyPlanToRow, rowToMonthlyPlan } from './types';
-import { syncLogger } from '@/lib/diagnostics/sync-logger';
-import { performanceTracker } from '@/lib/diagnostics/performance-tracker';
-
-/**
- * Génère un hash du contenu d'un plan pour détecter les vraies modifications
- * Exclut les métadonnées (id, dates, calculatedResults) qui changent sans modification utilisateur
- *
- * @param plan - Le plan à hasher
- * @returns Hash du contenu métier
- */
-export function generatePlanHash(plan: MonthlyPlan): string {
-  // Extraire uniquement les données métier (ce qui compte vraiment pour l'utilisateur)
-  const relevantData = {
-    month: plan.month,
-    fixedIncomes: plan.fixedIncomes.map((item) => ({
-      name: item.name,
-      amount: item.amount,
-    })),
-    fixedExpenses: plan.fixedExpenses.map((item) => ({
-      name: item.name,
-      amount: item.amount,
-    })),
-    envelopes: plan.envelopes.map((env) => ({
-      name: env.name,
-      type: env.type,
-      percentage: env.percentage,
-      amount: env.amount,
-    })),
-  };
-
-  // Générer une chaîne JSON canonique (clés triées)
-  const str = JSON.stringify(relevantData, Object.keys(relevantData).sort());
-
-  // Hash simple avec btoa (Base64)
-  // Note: pour plus de robustesse, on pourrait utiliser crypto.subtle.digest
-  try {
-    return btoa(unescape(encodeURIComponent(str)));
-  } catch {
-    // Fallback si btoa échoue (caractères spéciaux)
-    return str;
-  }
-}
 
 /**
  * Résultat d'une opération de synchronisation
@@ -50,7 +8,7 @@ export function generatePlanHash(plan: MonthlyPlan): string {
 export interface SyncResult {
   success: boolean;
   error?: string;
-  synced?: number; // Nombre de plans synchronisés
+  synced?: number;
 }
 
 /**
@@ -86,17 +44,7 @@ export async function uploadPlanToCloud(
     };
   }
 
-  const operationId = `upload-${plan.id}-${Date.now()}`;
-  performanceTracker.start(operationId, 'uploadPlan', { planId: plan.id, userId });
-
   try {
-    syncLogger.log({
-      operation: 'upload',
-      planId: plan.id,
-      status: 'success',
-      message: `Début upload du plan ${plan.month}`,
-    });
-
     // Convertir le plan au format DB
     const planRow = monthlyPlanToRow(plan, userId);
 
@@ -104,7 +52,7 @@ export async function uploadPlanToCloud(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existing, error: fetchError } = await (supabase
       .from('monthly_plans')
-      .select('id, updated_at')
+      .select('id')
       .eq('user_id', userId)
       .eq('plan_id', plan.id)
       .single() as any);
@@ -112,17 +60,6 @@ export async function uploadPlanToCloud(
     if (fetchError && fetchError.code !== 'PGRST116') {
       // PGRST116 = pas de résultat, c'est OK
       console.error('Erreur lors de la vérification du plan existant:', fetchError);
-
-      syncLogger.log({
-        operation: 'upload',
-        planId: plan.id,
-        status: 'error',
-        message: 'Erreur lors de la vérification du plan existant',
-        details: { error: fetchError },
-      });
-
-      performanceTracker.end(operationId, { success: false });
-
       return {
         success: false,
         error: 'Erreur lors de la vérification du plan existant',
@@ -142,29 +79,11 @@ export async function uploadPlanToCloud(
 
       if (updateError) {
         console.error('Erreur lors de la mise à jour du plan:', updateError);
-
-        syncLogger.log({
-          operation: 'upload',
-          planId: plan.id,
-          status: 'error',
-          message: 'Erreur lors de la mise à jour du plan',
-          details: { error: updateError },
-        });
-
-        performanceTracker.end(operationId, { success: false });
-
         return {
           success: false,
           error: 'Erreur lors de la mise à jour du plan',
         };
       }
-
-      syncLogger.log({
-        operation: 'upload',
-        planId: plan.id,
-        status: 'success',
-        message: `Plan ${plan.month} mis à jour avec succès`,
-      });
     } else {
       // Insertion d'un nouveau plan
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,40 +92,12 @@ export async function uploadPlanToCloud(
 
       if (insertError) {
         console.error('Erreur lors de l\'insertion du plan:', insertError);
-
-        syncLogger.log({
-          operation: 'upload',
-          planId: plan.id,
-          status: 'error',
-          message: 'Erreur lors de l\'insertion du plan',
-          details: { error: insertError },
-        });
-
-        performanceTracker.end(operationId, { success: false });
-
         return {
           success: false,
           error: 'Erreur lors de l\'insertion du plan',
         };
       }
-
-      syncLogger.log({
-        operation: 'upload',
-        planId: plan.id,
-        status: 'success',
-        message: `Nouveau plan ${plan.month} inséré avec succès`,
-      });
     }
-
-    const duration = performanceTracker.end(operationId, { success: true });
-
-    syncLogger.log({
-      operation: 'upload',
-      planId: plan.id,
-      status: 'success',
-      message: `Plan ${plan.month} uploadé avec succès`,
-      duration: duration || undefined,
-    });
 
     return {
       success: true,
@@ -214,17 +105,6 @@ export async function uploadPlanToCloud(
     };
   } catch (error) {
     console.error('Erreur inattendue lors de l\'upload:', error);
-
-    syncLogger.log({
-      operation: 'upload',
-      planId: plan.id,
-      status: 'error',
-      message: 'Erreur inattendue lors de l\'upload',
-      details: { error },
-    });
-
-    performanceTracker.end(operationId, { success: false });
-
     return {
       success: false,
       error: 'Erreur inattendue lors de l\'upload',
@@ -248,17 +128,7 @@ export async function downloadPlansFromCloud(
     };
   }
 
-  const operationId = `download-${userId}-${Date.now()}`;
-  performanceTracker.start(operationId, 'downloadPlans', { userId });
-
   try {
-    syncLogger.log({
-      operation: 'download',
-      status: 'success',
-      message: 'Début téléchargement des plans depuis le cloud',
-      details: { userId },
-    });
-
     const { data, error } = await supabase
       .from('monthly_plans')
       .select('*')
@@ -267,16 +137,6 @@ export async function downloadPlansFromCloud(
 
     if (error) {
       console.error('Erreur lors du téléchargement des plans:', error);
-
-      syncLogger.log({
-        operation: 'download',
-        status: 'error',
-        message: 'Erreur lors du téléchargement des plans',
-        details: { error },
-      });
-
-      performanceTracker.end(operationId, { success: false });
-
       return {
         success: false,
         error: 'Erreur lors du téléchargement des plans',
@@ -286,32 +146,12 @@ export async function downloadPlansFromCloud(
     // Convertir les rows en plans
     const plans = (data || []).map(rowToMonthlyPlan);
 
-    const duration = performanceTracker.end(operationId, { success: true, count: plans.length });
-
-    syncLogger.log({
-      operation: 'download',
-      status: 'success',
-      message: `${plans.length} plans téléchargés avec succès`,
-      duration: duration || undefined,
-      details: { count: plans.length },
-    });
-
     return {
       success: true,
       plans,
     };
   } catch (error) {
     console.error('Erreur inattendue lors du téléchargement:', error);
-
-    syncLogger.log({
-      operation: 'download',
-      status: 'error',
-      message: 'Erreur inattendue lors du téléchargement',
-      details: { error },
-    });
-
-    performanceTracker.end(operationId, { success: false });
-
     return {
       success: false,
       error: 'Erreur inattendue lors du téléchargement',
@@ -376,19 +216,6 @@ export async function syncPlan(
     if (remoteUpdatedAt > localUpdatedAt) {
       // Le plan distant est plus récent, on le retourne
       console.log(`Conflit détecté pour le plan ${localPlan.id} : version distante plus récente`);
-
-      syncLogger.log({
-        operation: 'conflict',
-        planId: localPlan.id,
-        status: 'warning',
-        message: `Conflit résolu : version distante gardée (${remotePlan.month})`,
-        details: {
-          localUpdatedAt,
-          remoteUpdatedAt,
-          resolution: 'remote',
-        },
-      });
-
       return {
         success: true,
         plan: remotePlan,
@@ -397,19 +224,6 @@ export async function syncPlan(
     } else if (localUpdatedAt > remoteUpdatedAt) {
       // Le plan local est plus récent, on l'upload
       console.log(`Conflit détecté pour le plan ${localPlan.id} : version locale plus récente`);
-
-      syncLogger.log({
-        operation: 'conflict',
-        planId: localPlan.id,
-        status: 'warning',
-        message: `Conflit résolu : version locale gardée (${localPlan.month})`,
-        details: {
-          localUpdatedAt,
-          remoteUpdatedAt,
-          resolution: 'local',
-        },
-      });
-
       const uploadResult = await uploadPlanToCloud(localPlan, userId);
       return {
         success: uploadResult.success,
@@ -419,13 +233,6 @@ export async function syncPlan(
       };
     } else {
       // Timestamps identiques, pas de conflit
-      syncLogger.log({
-        operation: 'sync',
-        planId: localPlan.id,
-        status: 'success',
-        message: `Plan ${localPlan.month} déjà à jour (timestamps identiques)`,
-      });
-
       return {
         success: true,
         plan: localPlan,
@@ -458,17 +265,7 @@ export async function deletePlanFromCloud(
     };
   }
 
-  const operationId = `delete-${planId}-${Date.now()}`;
-  performanceTracker.start(operationId, 'deletePlan', { planId, userId });
-
   try {
-    syncLogger.log({
-      operation: 'delete',
-      planId,
-      status: 'success',
-      message: `Début suppression du plan ${planId}`,
-    });
-
     const { error } = await supabase
       .from('monthly_plans')
       .delete()
@@ -477,49 +274,17 @@ export async function deletePlanFromCloud(
 
     if (error) {
       console.error('Erreur lors de la suppression du plan:', error);
-
-      syncLogger.log({
-        operation: 'delete',
-        planId,
-        status: 'error',
-        message: 'Erreur lors de la suppression du plan',
-        details: { error },
-      });
-
-      performanceTracker.end(operationId, { success: false });
-
       return {
         success: false,
         error: 'Erreur lors de la suppression du plan',
       };
     }
 
-    const duration = performanceTracker.end(operationId, { success: true });
-
-    syncLogger.log({
-      operation: 'delete',
-      planId,
-      status: 'success',
-      message: `Plan ${planId} supprimé avec succès`,
-      duration: duration || undefined,
-    });
-
     return {
       success: true,
     };
   } catch (error) {
     console.error('Erreur inattendue lors de la suppression:', error);
-
-    syncLogger.log({
-      operation: 'delete',
-      planId,
-      status: 'error',
-      message: 'Erreur inattendue lors de la suppression',
-      details: { error },
-    });
-
-    performanceTracker.end(operationId, { success: false });
-
     return {
       success: false,
       error: 'Erreur inattendue lors de la suppression',
@@ -533,13 +298,11 @@ export async function deletePlanFromCloud(
  *
  * @param localPlans - Les plans locaux à synchroniser
  * @param userId - L'ID de l'utilisateur
- * @param onProgress - Callback pour suivre la progression (optionnel)
  * @returns Résultat global de la synchronisation et les plans mis à jour
  */
 export async function syncAllPlans(
   localPlans: MonthlyPlan[],
-  userId: string,
-  onProgress?: (current: number, total: number) => void
+  userId: string
 ): Promise<{
   success: boolean;
   plans?: MonthlyPlan[];
@@ -554,29 +317,13 @@ export async function syncAllPlans(
     };
   }
 
-  const operationId = `syncAll-${userId}-${Date.now()}`;
-  performanceTracker.start(operationId, 'syncAllPlans', { userId, count: localPlans.length });
-
   try {
-    syncLogger.log({
-      operation: 'sync',
-      status: 'success',
-      message: `Début synchronisation de ${localPlans.length} plans`,
-      details: { count: localPlans.length },
-    });
-
     const updatedPlans: MonthlyPlan[] = [];
     let syncedCount = 0;
     let conflictCount = 0;
 
     // Synchroniser chaque plan
-    for (let i = 0; i < localPlans.length; i++) {
-      const plan = localPlans[i];
-
-      if (onProgress) {
-        onProgress(i + 1, localPlans.length);
-      }
-
+    for (const plan of localPlans) {
       const result = await syncPlan(plan, userId);
 
       if (result.success && result.plan) {
@@ -600,30 +347,7 @@ export async function syncAllPlans(
         (p) => !localPlanIds.has(p.id)
       );
       updatedPlans.push(...cloudOnlyPlans);
-
-      if (cloudOnlyPlans.length > 0) {
-        syncLogger.log({
-          operation: 'sync',
-          status: 'success',
-          message: `${cloudOnlyPlans.length} plans cloud-only récupérés`,
-          details: { count: cloudOnlyPlans.length },
-        });
-      }
     }
-
-    const duration = performanceTracker.end(operationId, {
-      success: true,
-      synced: syncedCount,
-      conflicts: conflictCount,
-    });
-
-    syncLogger.log({
-      operation: 'sync',
-      status: 'success',
-      message: `Synchronisation globale réussie : ${syncedCount} plans synchronisés, ${conflictCount} conflits résolus`,
-      duration: duration || undefined,
-      details: { synced: syncedCount, conflicts: conflictCount, total: updatedPlans.length },
-    });
 
     return {
       success: true,
@@ -633,16 +357,6 @@ export async function syncAllPlans(
     };
   } catch (error) {
     console.error('Erreur inattendue lors de la sync globale:', error);
-
-    syncLogger.log({
-      operation: 'sync',
-      status: 'error',
-      message: 'Erreur inattendue lors de la synchronisation globale',
-      details: { error },
-    });
-
-    performanceTracker.end(operationId, { success: false });
-
     return {
       success: false,
       error: 'Erreur inattendue lors de la synchronisation',
@@ -665,363 +379,4 @@ export function debouncedSync(callback: () => void): void {
     callback();
     syncTimeout = null;
   }, SYNC_DEBOUNCE_MS);
-}
-
-/**
- * Retry logic : réessaye une opération en cas d'échec
- *
- * @param operation - L'opération à réessayer
- * @param maxRetries - Nombre maximum de tentatives (défaut: 3)
- * @param delayMs - Délai entre chaque tentative en ms (défaut: 1000)
- * @returns Le résultat de l'opération
- */
-export async function retryOperation<T>(
-  operation: () => Promise<T>,
-  maxRetries = 3,
-  delayMs = 1000
-): Promise<T> {
-  let lastError: unknown;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      console.warn(`Tentative ${attempt}/${maxRetries} échouée:`, error);
-
-      if (attempt < maxRetries) {
-        // Attendre avant de réessayer (avec backoff exponentiel)
-        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
-      }
-    }
-  }
-
-  // Toutes les tentatives ont échoué
-  throw lastError;
-}
-
-/**
- * Récupère les métadonnées de tous les plans cloud de l'utilisateur
- * (sans charger les données complètes)
- *
- * @param userId - L'ID de l'utilisateur
- * @returns Les métadonnées des plans cloud
- */
-export async function getCloudPlansMetadata(
-  userId: string
-): Promise<{ success: boolean; plans?: import('./types').CloudPlanMetadata[]; error?: string }> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return {
-      success: false,
-      error: 'La synchronisation cloud n\'est pas configurée',
-    };
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('monthly_plans')
-      .select('id, plan_id, user_id, name, data, created_at, updated_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Erreur lors de la récupération des métadonnées:', error);
-      return {
-        success: false,
-        error: 'Erreur lors de la récupération des plans cloud',
-      };
-    }
-
-    // Extraire les métadonnées sans les données complètes
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const metadata = (data || []).map((row: any) => {
-      const rowData = row.data as any;
-      return {
-        id: row.id,
-        planId: row.plan_id,
-        userId: row.user_id,
-        name: row.name,
-        month: rowData.month || '',
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    });
-
-    return {
-      success: true,
-      plans: metadata,
-    };
-  } catch (error) {
-    console.error('Erreur inattendue:', error);
-    return {
-      success: false,
-      error: 'Erreur inattendue lors de la récupération',
-    };
-  }
-}
-
-/**
- * Compare le statut de synchronisation d'un plan local avec le cloud
- * Utilise le hash de contenu pour détecter les vraies modifications
- *
- * @param localPlan - Le plan local (peut être null si plan cloud uniquement)
- * @param cloudMetadata - Les métadonnées cloud (peut être null si plan local uniquement)
- * @param cloudPlanData - Les données complètes du plan cloud (optionnel, pour comparaison de hash)
- * @returns Le statut de synchronisation du plan
- */
-export function comparePlanStatus(
-  localPlan: MonthlyPlan | null,
-  cloudMetadata: import('./types').CloudPlanMetadata | null,
-  cloudPlanData?: MonthlyPlan | null
-): import('./types').PlanSyncStatus {
-  // Plan existe seulement sur le cloud
-  if (!localPlan && cloudMetadata) {
-    return 'cloud_only';
-  }
-
-  // Plan existe seulement en local
-  if (localPlan && !cloudMetadata) {
-    return 'not_synced';
-  }
-
-  // Plan existe des deux côtés
-  if (localPlan && cloudMetadata) {
-    // Si on a les données cloud complètes, comparer les hash de contenu d'abord
-    if (cloudPlanData) {
-      const localHash = generatePlanHash(localPlan);
-      const cloudHash = generatePlanHash(cloudPlanData);
-
-      // Si les hash sont identiques, le contenu est le même → synchronisé
-      // (même si les timestamps diffèrent à cause de recalculs)
-      if (localHash === cloudHash) {
-        return 'synced';
-      }
-
-      // Les contenus sont différents, comparer les timestamps
-      const localTime = new Date(localPlan.updatedAt).getTime();
-      const cloudTime = new Date(cloudMetadata.updatedAt).getTime();
-
-      if (localTime > cloudTime) {
-        return 'local_newer';
-      } else if (cloudTime > localTime) {
-        return 'cloud_newer';
-      } else {
-        // Timestamps identiques mais contenus différents (cas rare)
-        return 'error';
-      }
-    }
-
-    // Fallback : comparer uniquement les timestamps (si pas de données cloud complètes)
-    const localTime = new Date(localPlan.updatedAt).getTime();
-    const cloudTime = new Date(cloudMetadata.updatedAt).getTime();
-
-    const timeDiff = Math.abs(localTime - cloudTime);
-
-    // Tolérance de 1 seconde pour les différences de timing
-    if (timeDiff < 1000) {
-      return 'synced';
-    }
-
-    if (localTime > cloudTime) {
-      return 'local_newer';
-    } else {
-      return 'cloud_newer';
-    }
-  }
-
-  // Cas impossible en théorie
-  return 'error';
-}
-
-/**
- * Upload plusieurs plans sélectionnés vers le cloud
- *
- * @param plans - Les plans à uploader
- * @param userId - L'ID de l'utilisateur
- * @param onProgress - Callback pour suivre la progression
- * @returns Le résultat de l'upload multiple
- */
-export async function uploadSelectedPlans(
-  plans: MonthlyPlan[],
-  userId: string,
-  onProgress?: (current: number, total: number) => void
-): Promise<{
-  success: boolean;
-  uploaded?: number;
-  failed?: number;
-  errors?: string[];
-}> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return {
-      success: false,
-      errors: ['La synchronisation cloud n\'est pas configurée'],
-    };
-  }
-
-  let uploadedCount = 0;
-  let failedCount = 0;
-  const errors: string[] = [];
-
-  for (let i = 0; i < plans.length; i++) {
-    const plan = plans[i];
-
-    if (onProgress) {
-      onProgress(i + 1, plans.length);
-    }
-
-    try {
-      const result = await uploadPlanToCloud(plan, userId);
-
-      if (result.success) {
-        uploadedCount++;
-      } else {
-        failedCount++;
-        errors.push(`${plan.month}: ${result.error}`);
-      }
-    } catch (error) {
-      failedCount++;
-      errors.push(`${plan.month}: erreur inattendue`);
-      console.error(`Erreur upload plan ${plan.id}:`, error);
-    }
-  }
-
-  return {
-    success: uploadedCount > 0,
-    uploaded: uploadedCount,
-    failed: failedCount,
-    errors: errors.length > 0 ? errors : undefined,
-  };
-}
-
-/**
- * Télécharge plusieurs plans sélectionnés depuis le cloud
- *
- * @param planIds - Les IDs des plans à télécharger
- * @param userId - L'ID de l'utilisateur
- * @param onProgress - Callback pour suivre la progression
- * @returns Le résultat du téléchargement multiple
- */
-export async function downloadSelectedPlans(
-  planIds: string[],
-  userId: string,
-  onProgress?: (current: number, total: number) => void
-): Promise<{
-  success: boolean;
-  plans?: MonthlyPlan[];
-  downloaded?: number;
-  failed?: number;
-  errors?: string[];
-}> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return {
-      success: false,
-      errors: ['La synchronisation cloud n\'est pas configurée'],
-    };
-  }
-
-  const downloadedPlans: MonthlyPlan[] = [];
-  let downloadedCount = 0;
-  let failedCount = 0;
-  const errors: string[] = [];
-
-  for (let i = 0; i < planIds.length; i++) {
-    const planId = planIds[i];
-
-    if (onProgress) {
-      onProgress(i + 1, planIds.length);
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('monthly_plans')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('plan_id', planId)
-        .single();
-
-      if (error) {
-        failedCount++;
-        errors.push(`${planId}: ${error.message}`);
-        continue;
-      }
-
-      if (data) {
-        const plan = rowToMonthlyPlan(data);
-        downloadedPlans.push(plan);
-        downloadedCount++;
-      }
-    } catch (error) {
-      failedCount++;
-      errors.push(`${planId}: erreur inattendue`);
-      console.error(`Erreur download plan ${planId}:`, error);
-    }
-  }
-
-  return {
-    success: downloadedCount > 0,
-    plans: downloadedPlans,
-    downloaded: downloadedCount,
-    failed: failedCount,
-    errors: errors.length > 0 ? errors : undefined,
-  };
-}
-
-/**
- * Supprime plusieurs plans sélectionnés du cloud
- *
- * @param planIds - Les IDs des plans à supprimer
- * @param userId - L'ID de l'utilisateur
- * @param onProgress - Callback pour suivre la progression
- * @returns Le résultat de la suppression multiple
- */
-export async function deleteSelectedPlansFromCloud(
-  planIds: string[],
-  userId: string,
-  onProgress?: (current: number, total: number) => void
-): Promise<{
-  success: boolean;
-  deleted?: number;
-  failed?: number;
-  errors?: string[];
-}> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return {
-      success: false,
-      errors: ['La synchronisation cloud n\'est pas configurée'],
-    };
-  }
-
-  let deletedCount = 0;
-  let failedCount = 0;
-  const errors: string[] = [];
-
-  for (let i = 0; i < planIds.length; i++) {
-    const planId = planIds[i];
-
-    if (onProgress) {
-      onProgress(i + 1, planIds.length);
-    }
-
-    try {
-      const result = await deletePlanFromCloud(planId, userId);
-
-      if (result.success) {
-        deletedCount++;
-      } else {
-        failedCount++;
-        errors.push(`${planId}: ${result.error}`);
-      }
-    } catch (error) {
-      failedCount++;
-      errors.push(`${planId}: erreur inattendue`);
-      console.error(`Erreur suppression plan ${planId}:`, error);
-    }
-  }
-
-  return {
-    success: deletedCount > 0,
-    deleted: deletedCount,
-    failed: failedCount,
-    errors: errors.length > 0 ? errors : undefined,
-  };
 }

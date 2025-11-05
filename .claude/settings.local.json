@@ -42,7 +42,12 @@
       "Bash(move:*)",
       "Bash(del nul)",
       "Bash(timeout 10 bash -c \"while ! curl -s http://localhost:3000 > /dev/null; do sleep 1; done && echo ''Server ready!''\")",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "mcp__vercel__list_teams",
+      "mcp__vercel__list_projects",
+      "mcp__vercel__list_deployments",
+      "mcp__vercel__get_deployment",
+      "mcp__vercel__get_deployment_build_logs"
     ],
     "deny": [],
     "ask": []

@@ -124,39 +124,3 @@ export function rowToMonthlyPlan(row: MonthlyPlanRow): MonthlyPlan {
   };
 }
 
-/**
- * Statut de synchronisation d'un plan
- */
-export type PlanSyncStatus =
-  | 'synced'           // Plan synchronisé (existe en local et cloud, timestamps identiques)
-  | 'not_synced'       // Plan local non uploadé vers le cloud
-  | 'cloud_only'       // Plan existe seulement sur le cloud
-  | 'local_newer'      // Plan local plus récent que le cloud
-  | 'cloud_newer'      // Plan cloud plus récent que le local
-  | 'syncing'          // Synchronisation en cours
-  | 'error';           // Erreur lors de la dernière sync
-
-/**
- * Information détaillée sur le statut de sync d'un plan
- */
-export interface PlanSyncInfo {
-  planId: string;
-  status: PlanSyncStatus;
-  lastSyncAt?: string;
-  cloudUpdatedAt?: string;
-  localUpdatedAt?: string;
-  error?: string;
-}
-
-/**
- * Métadonnées d'un plan cloud (sans les données complètes)
- */
-export interface CloudPlanMetadata {
-  id: string;          // UUID de la DB
-  planId: string;      // ID du plan (côté app)
-  userId: string;
-  name: string;
-  month: string;       // Extrait de data.month
-  createdAt: string;
-  updatedAt: string;
-}

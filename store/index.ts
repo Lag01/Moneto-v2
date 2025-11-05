@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import localforage from 'localforage';
 import type { User } from '@/lib/supabase/auth';
-import type { PlanSyncInfo, CloudPlanMetadata } from '@/lib/supabase/types';
 
 /**
  * Types pour les transactions
@@ -151,19 +150,9 @@ interface AppState {
 
   // Synchronisation cloud
   syncStatus: SyncStatus;
-  planSyncStatus: Record<string, PlanSyncInfo>; // Statut de sync par plan
   syncWithCloud: () => Promise<void>;
-  syncSinglePlan: (planId: string) => Promise<void>;
   downloadPlansFromCloud: () => Promise<void>;
   setSyncStatus: (status: Partial<SyncStatus>) => void;
-
-  // Nouvelles actions de sync granulaire
-  getCloudPlansMetadata: () => Promise<{ success: boolean; plans?: CloudPlanMetadata[]; error?: string }>;
-  uploadSelectedPlansToCloud: (planIds: string[]) => Promise<{ success: boolean; uploaded?: number; errors?: string[] }>;
-  downloadSelectedPlansFromCloud: (planIds: string[]) => Promise<{ success: boolean; downloaded?: number; errors?: string[] }>;
-  deleteSelectedPlansFromCloud: (planIds: string[]) => Promise<{ success: boolean; deleted?: number; errors?: string[] }>;
-  updatePlanSyncStatus: (planId: string, status: Partial<PlanSyncInfo>) => void;
-  refreshPlansSyncStatus: () => Promise<void>;
 
   // Migration des données locales
   dataMigrationStatus: DataMigrationStatus;
@@ -261,7 +250,6 @@ export const useAppStore = create<AppState>()(
         lastSyncAt: null,
         error: null,
       },
-      planSyncStatus: {},
       dataMigrationStatus: {
         hasBeenProposed: false,
         hasBeenCompleted: false,
@@ -375,39 +363,28 @@ export const useAppStore = create<AppState>()(
         const currentPlan = get().monthlyPlans.find((p) => p.id === id);
         if (!currentPlan) return;
 
-        // Vérifier si le contenu a vraiment changé
-        import('@/lib/supabase/sync').then(({ generatePlanHash }) => {
-          const updatedPlan = { ...currentPlan, ...plan };
-          const oldHash = generatePlanHash(currentPlan);
-          const newHash = generatePlanHash(updatedPlan);
+        // Mettre à jour le plan avec nouveau timestamp
+        set((state) => ({
+          monthlyPlans: state.monthlyPlans.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  ...plan,
+                  updatedAt: new Date().toISOString()
+                }
+              : p
+          ),
+        }));
 
-          // Ne mettre à jour updatedAt QUE si le contenu a vraiment changé
-          const shouldUpdateTimestamp = oldHash !== newHash;
-
-          set((state) => ({
-            monthlyPlans: state.monthlyPlans.map((p) =>
-              p.id === id
-                ? {
-                    ...p,
-                    ...plan,
-                    updatedAt: shouldUpdateTimestamp
-                      ? new Date().toISOString()
-                      : p.updatedAt
-                  }
-                : p
-            ),
-          }));
-
-          // Auto-sync avec debounce si utilisateur connecté ET contenu modifié
-          const user = get().user;
-          if (user && shouldUpdateTimestamp) {
-            import('@/lib/supabase/sync').then(({ debouncedSync }) => {
-              debouncedSync(() => {
-                get().syncSinglePlan(id);
-              });
+        // Auto-sync avec debounce si utilisateur connecté
+        const user = get().user;
+        if (user) {
+          import('@/lib/supabase/sync').then(({ debouncedSync }) => {
+            debouncedSync(() => {
+              get().syncWithCloud();
             });
-          }
-        });
+          });
+        }
       },
 
       deleteMonthlyPlan: (id: string) => {
@@ -661,45 +638,6 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      syncSinglePlan: async (planId: string) => {
-        const state = get();
-        const user = state.user;
-
-        if (!user) {
-          console.warn('Impossible de synchroniser : utilisateur non connecté');
-          return;
-        }
-
-        const plan = state.monthlyPlans.find((p) => p.id === planId);
-        if (!plan) {
-          console.error(`Plan ${planId} introuvable`);
-          return;
-        }
-
-        try {
-          const { syncPlan } = await import('@/lib/supabase/sync');
-
-          const result = await syncPlan(plan, user.id);
-
-          if (result.success && result.plan) {
-            // Mettre à jour le plan avec la version synchronisée
-            set((state) => ({
-              monthlyPlans: state.monthlyPlans.map((p) =>
-                p.id === planId ? result.plan! : p
-              ),
-            }));
-
-            if (result.conflict) {
-              console.log(`Conflit résolu pour le plan ${planId}`);
-            }
-          } else {
-            console.error(`Erreur lors de la sync du plan ${planId}:`, result.error);
-          }
-        } catch (error) {
-          console.error('Erreur lors de la synchronisation du plan:', error);
-        }
-      },
-
       downloadPlansFromCloud: async () => {
         const state = get();
         const user = state.user;
@@ -821,218 +759,6 @@ export const useAppStore = create<AppState>()(
             success: false,
             error: 'Erreur inattendue lors de la migration',
           };
-        }
-      },
-
-      // Nouvelles actions de synchronisation granulaire
-      getCloudPlansMetadata: async () => {
-        const state = get();
-        const user = state.user;
-
-        if (!user) {
-          return {
-            success: false,
-            error: 'Utilisateur non connecté',
-          };
-        }
-
-        try {
-          const { getCloudPlansMetadata } = await import('@/lib/supabase/sync');
-          return await getCloudPlansMetadata(user.id);
-        } catch (error) {
-          console.error('Erreur lors de la récupération des métadonnées cloud:', error);
-          return {
-            success: false,
-            error: 'Erreur inattendue',
-          };
-        }
-      },
-
-      uploadSelectedPlansToCloud: async (planIds: string[]) => {
-        const state = get();
-        const user = state.user;
-
-        if (!user) {
-          return {
-            success: false,
-            errors: ['Utilisateur non connecté'],
-          };
-        }
-
-        const plansToUpload = state.monthlyPlans.filter((p) => planIds.includes(p.id));
-
-        if (plansToUpload.length === 0) {
-          return {
-            success: false,
-            errors: ['Aucun plan à uploader'],
-          };
-        }
-
-        try {
-          const { uploadSelectedPlans } = await import('@/lib/supabase/sync');
-
-          // Marquer les plans comme en cours de sync
-          planIds.forEach((planId) => {
-            state.updatePlanSyncStatus(planId, { status: 'syncing' });
-          });
-
-          const result = await uploadSelectedPlans(plansToUpload, user.id);
-
-          // Rafraîchir le statut de sync
-          await state.refreshPlansSyncStatus();
-
-          return result;
-        } catch (error) {
-          console.error('Erreur lors de l\'upload des plans:', error);
-          return {
-            success: false,
-            errors: ['Erreur inattendue'],
-          };
-        }
-      },
-
-      downloadSelectedPlansFromCloud: async (planIds: string[]) => {
-        const state = get();
-        const user = state.user;
-
-        if (!user) {
-          return {
-            success: false,
-            errors: ['Utilisateur non connecté'],
-          };
-        }
-
-        try {
-          const { downloadSelectedPlans } = await import('@/lib/supabase/sync');
-
-          const result = await downloadSelectedPlans(planIds, user.id);
-
-          if (result.success && result.plans) {
-            // Ajouter les plans téléchargés au store
-            const existingPlanIds = new Set(state.monthlyPlans.map((p) => p.id));
-            const newPlans = result.plans.filter((p) => !existingPlanIds.has(p.id));
-
-            if (newPlans.length > 0) {
-              set((state) => ({
-                monthlyPlans: [...state.monthlyPlans, ...newPlans],
-              }));
-
-              // Recalculer les plans téléchargés
-              newPlans.forEach((plan) => {
-                state.recalculatePlan(plan.id);
-              });
-            }
-
-            // Rafraîchir le statut de sync
-            await state.refreshPlansSyncStatus();
-          }
-
-          return result;
-        } catch (error) {
-          console.error('Erreur lors du téléchargement des plans:', error);
-          return {
-            success: false,
-            errors: ['Erreur inattendue'],
-          };
-        }
-      },
-
-      deleteSelectedPlansFromCloud: async (planIds: string[]) => {
-        const state = get();
-        const user = state.user;
-
-        if (!user) {
-          return {
-            success: false,
-            errors: ['Utilisateur non connecté'],
-          };
-        }
-
-        try {
-          const { deleteSelectedPlansFromCloud } = await import('@/lib/supabase/sync');
-
-          const result = await deleteSelectedPlansFromCloud(planIds, user.id);
-
-          if (result.success) {
-            // Rafraîchir le statut de sync
-            await state.refreshPlansSyncStatus();
-          }
-
-          return result;
-        } catch (error) {
-          console.error('Erreur lors de la suppression des plans:', error);
-          return {
-            success: false,
-            errors: ['Erreur inattendue'],
-          };
-        }
-      },
-
-      updatePlanSyncStatus: (planId: string, status: Partial<PlanSyncInfo>) => {
-        set((state) => ({
-          planSyncStatus: {
-            ...state.planSyncStatus,
-            [planId]: {
-              ...state.planSyncStatus[planId],
-              planId,
-              ...status,
-            } as PlanSyncInfo,
-          },
-        }));
-      },
-
-      refreshPlansSyncStatus: async () => {
-        const state = get();
-        const user = state.user;
-
-        if (!user) {
-          console.warn('Impossible de rafraîchir : utilisateur non connecté');
-          return;
-        }
-
-        try {
-          const { getCloudPlansMetadata, comparePlanStatus } = await import('@/lib/supabase/sync');
-
-          const result = await getCloudPlansMetadata(user.id);
-
-          if (result.success && result.plans) {
-            const cloudPlansMap = new Map(
-              result.plans.map((p) => [p.planId, p])
-            );
-
-            const newSyncStatus: Record<string, PlanSyncInfo> = {};
-
-            // Vérifier chaque plan local
-            state.monthlyPlans.forEach((localPlan) => {
-              const cloudMetadata = cloudPlansMap.get(localPlan.id);
-              const status = comparePlanStatus(localPlan, cloudMetadata || null);
-
-              newSyncStatus[localPlan.id] = {
-                planId: localPlan.id,
-                status,
-                localUpdatedAt: localPlan.updatedAt,
-                cloudUpdatedAt: cloudMetadata?.updatedAt,
-              };
-
-              // Retirer du map pour identifier les plans cloud-only
-              if (cloudMetadata) {
-                cloudPlansMap.delete(localPlan.id);
-              }
-            });
-
-            // Ajouter les plans cloud-only
-            cloudPlansMap.forEach((cloudPlan) => {
-              newSyncStatus[cloudPlan.planId] = {
-                planId: cloudPlan.planId,
-                status: 'cloud_only',
-                cloudUpdatedAt: cloudPlan.updatedAt,
-              };
-            });
-
-            set({ planSyncStatus: newSyncStatus });
-          }
-        } catch (error) {
-          console.error('Erreur lors du rafraîchissement du statut de sync:', error);
         }
       },
 
