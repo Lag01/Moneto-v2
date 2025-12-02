@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import localforage from 'localforage';
-import type { User } from '@/lib/supabase/auth';
+import type { User } from '@/lib/auth-stack/auth';
 
 /**
  * Types pour les transactions
@@ -349,7 +349,7 @@ export const useAppStore = create<AppState>()(
         // Upload vers le cloud si utilisateur connecté
         const user = get().user;
         if (user) {
-          import('@/lib/supabase/sync').then(({ uploadPlanToCloud }) => {
+          import('@/lib/neon/sync').then(({ uploadPlanToCloud }) => {
             uploadPlanToCloud(newPlan, user.id).catch((error) => {
               console.error('Erreur lors de l\'upload du nouveau plan:', error);
             });
@@ -379,7 +379,7 @@ export const useAppStore = create<AppState>()(
         // Auto-sync avec debounce si utilisateur connecté
         const user = get().user;
         if (user) {
-          import('@/lib/supabase/sync').then(({ debouncedSync }) => {
+          import('@/lib/neon/sync').then(({ debouncedSync }) => {
             debouncedSync(() => {
               get().syncWithCloud();
             });
@@ -396,7 +396,7 @@ export const useAppStore = create<AppState>()(
         // Supprimer du cloud si utilisateur connecté
         const user = get().user;
         if (user) {
-          import('@/lib/supabase/sync').then(({ deletePlanFromCloud }) => {
+          import('@/lib/neon/sync').then(({ deletePlanFromCloud }) => {
             deletePlanFromCloud(id, user.id).catch((error) => {
               console.error('Erreur lors de la suppression du plan dans le cloud:', error);
             });
@@ -552,7 +552,7 @@ export const useAppStore = create<AppState>()(
 
       logout: async () => {
         try {
-          const { signOut } = await import('@/lib/supabase/auth');
+          const { signOut } = await import('@/lib/auth-stack/auth');
           const result = await signOut();
 
           if (result.success) {
@@ -567,16 +567,11 @@ export const useAppStore = create<AppState>()(
 
       initializeAuth: async () => {
         try {
-          const { getCurrentUser, onAuthStateChange } = await import('@/lib/supabase/auth');
+          const { getCurrentUser } = await import('@/lib/auth-stack/auth');
 
           // Récupérer l'utilisateur actuel
           const user = await getCurrentUser();
           set({ user });
-
-          // Écouter les changements d'authentification
-          onAuthStateChange((user) => {
-            set({ user });
-          });
 
           // Si un utilisateur est connecté, télécharger ses plans depuis le cloud
           if (user) {
@@ -607,7 +602,7 @@ export const useAppStore = create<AppState>()(
         state.setSyncStatus({ isSyncing: true, error: null });
 
         try {
-          const { syncAllPlans } = await import('@/lib/supabase/sync');
+          const { syncAllPlans } = await import('@/lib/neon/sync');
 
           const result = await syncAllPlans(state.monthlyPlans, user.id);
 
@@ -650,7 +645,7 @@ export const useAppStore = create<AppState>()(
         state.setSyncStatus({ isSyncing: true, error: null });
 
         try {
-          const { downloadPlansFromCloud } = await import('@/lib/supabase/sync');
+          const { downloadPlansFromCloud } = await import('@/lib/neon/sync');
 
           const result = await downloadPlansFromCloud(user.id);
 
@@ -713,7 +708,7 @@ export const useAppStore = create<AppState>()(
         }
 
         try {
-          const { uploadPlanToCloud } = await import('@/lib/supabase/sync');
+          const { uploadPlanToCloud } = await import('@/lib/neon/sync');
 
           let migratedCount = 0;
           const errors: string[] = [];

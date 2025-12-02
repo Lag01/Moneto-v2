@@ -7,10 +7,6 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp"
-    },
-    "stack-auth": {
-      "type": "http",
-      "url": "https://mcp.stack-auth.com/"
     }
   }
 }

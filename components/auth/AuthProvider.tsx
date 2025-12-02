@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useUser } from '@stackframe/stack';
 import { useAppStore } from '@/store';
 import LocalDataMigrationModal from './LocalDataMigrationModal';
 
@@ -8,13 +9,14 @@ import LocalDataMigrationModal from './LocalDataMigrationModal';
  * AuthProvider - Initialise l'authentification au chargement de l'application
  *
  * Ce composant :
- * 1. Récupère l'utilisateur actuel depuis Supabase au chargement
- * 2. Écoute les changements de session (login, logout, refresh token)
+ * 1. Récupère l'utilisateur actuel depuis Stack Auth au chargement
+ * 2. Écoute les changements de session (login, logout) via useUser hook
  * 3. Met à jour le store Zustand automatiquement
  * 4. Détecte les données locales à migrer et propose la synchronisation
  */
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const initializeAuth = useAppStore((state) => state.initializeAuth);
+  const stackUser = useUser();
+  const setUser = useAppStore((state) => state.setUser);
   const user = useAppStore((state) => state.user);
   const monthlyPlans = useAppStore((state) => state.monthlyPlans);
   const dataMigrationStatus = useAppStore((state) => state.dataMigrationStatus);
@@ -22,10 +24,20 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const [showMigrationModal, setShowMigrationModal] = useState(false);
 
+  // Synchroniser Stack Auth user avec Zustand store
   useEffect(() => {
-    // Initialiser l'authentification au montage du composant
-    initializeAuth();
-  }, [initializeAuth]);
+    if (stackUser) {
+      const appUser = {
+        id: stackUser.id,
+        email: stackUser.primaryEmail || '',
+        isPremium: true,
+        isAuthenticated: true,
+      };
+      setUser(appUser);
+    } else {
+      setUser(null);
+    }
+  }, [stackUser, setUser]);
 
   useEffect(() => {
     // Vérifier si on doit proposer la migration

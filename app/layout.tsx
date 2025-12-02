@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { StackProvider, StackTheme } from "@stackframe/stack";
+import { stackClientApp } from "../stack/client";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { TutorialProvider } from "@/context/TutorialContext";
@@ -46,7 +48,7 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
-      <body className="antialiased">
+      <body className="antialiased"><StackProvider app={stackClientApp}><StackTheme>
         <ThemeProvider>
           <AuthProvider>
             <TutorialProvider>
@@ -57,7 +59,7 @@ export default function RootLayout({
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />
-      </body>
+      </StackTheme></StackProvider></body>
     </html>
   );
 }
