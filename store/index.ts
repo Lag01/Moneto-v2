@@ -693,7 +693,7 @@ export const useAppStore = create<AppState>()(
           } else {
             state.setSyncStatus({
               isSyncing: false,
-              error: result.error || 'Erreur inconnue',
+              error: result.error?.message || 'Erreur inconnue',
             });
           }
         } catch (error) {

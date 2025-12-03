@@ -1,4 +1,4 @@
-import type { StackClientUser } from '@stackframe/stack';
+import type { CurrentUser } from '@stackframe/stack';
 
 export interface User {
   id: string;
@@ -13,7 +13,7 @@ export interface AuthResult {
   error?: string;
 }
 
-function toAppUser(stackUser: StackClientUser): User {
+function toAppUser(stackUser: CurrentUser): User {
   return {
     id: stackUser.id,
     email: stackUser.primaryEmail || '',

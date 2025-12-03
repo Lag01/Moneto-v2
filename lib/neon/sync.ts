@@ -81,7 +81,14 @@ export async function uploadPlanToCloud(
     return { success: true, synced: 1 };
   } catch (error) {
     console.error('Erreur upload:', error);
-    return { success: false, error: 'Erreur upload' };
+    return {
+      success: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'Erreur upload',
+        details: error,
+      },
+    };
   }
 }
 
@@ -101,7 +108,14 @@ export async function downloadPlansFromCloud(
     return { success: true, plans };
   } catch (error) {
     console.error('Erreur download:', error);
-    return { success: false, error: 'Erreur download' };
+    return {
+      success: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'Erreur download',
+        details: error,
+      },
+    };
   }
 }
 
@@ -111,7 +125,7 @@ export async function syncPlan(
 ): Promise<{
   success: boolean;
   plan?: MonthlyPlan;
-  error?: string;
+  error?: SyncError;
   conflict?: boolean;
 }> {
   try {
@@ -173,7 +187,14 @@ export async function syncPlan(
     }
   } catch (error) {
     console.error('Erreur sync plan:', error);
-    return { success: false, error: 'Erreur sync' };
+    return {
+      success: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'Erreur sync',
+        details: error,
+      },
+    };
   }
 }
 
@@ -193,7 +214,14 @@ export async function deletePlanFromCloud(
     return { success: true };
   } catch (error) {
     console.error('Erreur delete:', error);
-    return { success: false, error: 'Erreur delete' };
+    return {
+      success: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'Erreur delete',
+        details: error,
+      },
+    };
   }
 }
 
