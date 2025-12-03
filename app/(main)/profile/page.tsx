@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAppStore } from '@/store';
-import LayoutWithNav from '@/app/layout-with-nav';
+import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import SyncIndicator from '@/components/sync/SyncIndicator';
 import { formatDate } from '@/lib/financial';
 

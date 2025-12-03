@@ -2,20 +2,26 @@ import { executeQuery } from './client';
 import type { MonthlyPlan } from '@/store';
 import { monthlyPlanToRow, rowToMonthlyPlan } from './types';
 
+export interface SyncError {
+  code: 'NETWORK' | 'AUTH' | 'SERVER' | 'CONFLICT' | 'UNKNOWN';
+  message: string;
+  details?: unknown;
+}
+
 export interface SyncResult {
   success: boolean;
-  error?: string;
+  error?: SyncError;
   synced?: number;
 }
 
 export interface DownloadResult {
   success: boolean;
   plans?: MonthlyPlan[];
-  error?: string;
+  error?: SyncError;
 }
 
 let syncTimeout: NodeJS.Timeout | null = null;
-const SYNC_DEBOUNCE_MS = 2000;
+const SYNC_DEBOUNCE_MS = 500;
 
 export async function uploadPlanToCloud(
   plan: MonthlyPlan,
@@ -133,12 +139,28 @@ export async function syncPlan(
     const localUpdatedAt = new Date(localPlan.updatedAt).getTime();
     const remoteUpdatedAt = new Date(remotePlan.updatedAt).getTime();
 
-    // Last-write-wins
+    // Last-write-wins avec notification
     if (remoteUpdatedAt > localUpdatedAt) {
       console.log(`Conflit : version distante plus récente`);
+
+      // Notification de conflit (client-side uniquement)
+      if (typeof window !== 'undefined') {
+        import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+          toastNotifications.conflictResolved(remotePlan.month, 'remote');
+        });
+      }
+
       return { success: true, plan: remotePlan, conflict: true };
     } else if (localUpdatedAt > remoteUpdatedAt) {
       console.log(`Conflit : version locale plus récente`);
+
+      // Notification de conflit (client-side uniquement)
+      if (typeof window !== 'undefined') {
+        import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+          toastNotifications.conflictResolved(localPlan.month, 'local');
+        });
+      }
+
       const uploadResult = await uploadPlanToCloud(localPlan, userId);
       return {
         success: uploadResult.success,
@@ -183,23 +205,32 @@ export async function syncAllPlans(
   plans?: MonthlyPlan[];
   synced?: number;
   conflicts?: number;
-  error?: string;
+  error?: SyncError;
 }> {
   try {
     const updatedPlans: MonthlyPlan[] = [];
     let syncedCount = 0;
     let conflictCount = 0;
 
-    for (const plan of localPlans) {
-      const result = await syncPlan(plan, userId);
+    // Batching : traiter les plans par groupes de 5 en parallèle
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < localPlans.length; i += BATCH_SIZE) {
+      const batch = localPlans.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map((plan) => syncPlan(plan, userId))
+      );
 
-      if (result.success && result.plan) {
-        updatedPlans.push(result.plan);
-        syncedCount++;
-        if (result.conflict) conflictCount++;
-      } else {
-        console.error(`Erreur sync plan ${plan.id}:`, result.error);
-        updatedPlans.push(plan);
+      for (const result of results) {
+        if (result.success && result.plan) {
+          updatedPlans.push(result.plan);
+          syncedCount++;
+          if (result.conflict) conflictCount++;
+        } else {
+          console.error(`Erreur sync plan:`, result.error);
+          // En cas d'erreur, garder la version locale
+          const failedPlan = batch.find((p) => p.id === result.plan?.id);
+          if (failedPlan) updatedPlans.push(failedPlan);
+        }
       }
     }
 
@@ -220,7 +251,14 @@ export async function syncAllPlans(
     };
   } catch (error) {
     console.error('Erreur sync globale:', error);
-    return { success: false, error: 'Erreur sync globale' };
+    return {
+      success: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'Erreur sync globale',
+        details: error,
+      },
+    };
   }
 }
 

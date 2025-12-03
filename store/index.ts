@@ -618,18 +618,41 @@ export const useAppStore = create<AppState>()(
             });
 
             console.log(`Synchronisation réussie : ${result.synced} plans synchronisés, ${result.conflicts} conflits résolus`);
+
+            // Notification de succès
+            if (typeof window !== 'undefined') {
+              import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                toastNotifications.syncSuccess(result.synced || 0);
+              });
+            }
           } else {
+            const errorMessage = result.error?.message || 'Erreur inconnue';
             state.setSyncStatus({
               isSyncing: false,
-              error: result.error || 'Erreur inconnue',
+              error: errorMessage,
             });
+
+            // Notification d'erreur
+            if (typeof window !== 'undefined') {
+              import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                toastNotifications.syncError(errorMessage);
+              });
+            }
           }
         } catch (error) {
           console.error('Erreur lors de la synchronisation:', error);
+          const errorMessage = 'Erreur lors de la synchronisation';
           state.setSyncStatus({
             isSyncing: false,
-            error: 'Erreur lors de la synchronisation',
+            error: errorMessage,
           });
+
+          // Notification d'erreur
+          if (typeof window !== 'undefined') {
+            import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+              toastNotifications.syncError(errorMessage);
+            });
+          }
         }
       },
 
@@ -663,7 +686,10 @@ export const useAppStore = create<AppState>()(
               },
             }));
 
-            console.log(`Téléchargement réussi : ${cloudOnlyPlans.length} nouveaux plans`);
+            console.log(`[Sync] Téléchargement réussi : ${cloudOnlyPlans.length} nouveaux plans depuis le cloud`);
+            if (cloudOnlyPlans.length > 0) {
+              console.log(`[Sync] Plans téléchargés :`, cloudOnlyPlans.map(p => p.month).join(', '));
+            }
           } else {
             state.setSyncStatus({
               isSyncing: false,
@@ -671,7 +697,7 @@ export const useAppStore = create<AppState>()(
             });
           }
         } catch (error) {
-          console.error('Erreur lors du téléchargement:', error);
+          console.error('[Sync] Erreur lors du téléchargement des plans depuis Neon:', error);
           state.setSyncStatus({
             isSyncing: false,
             error: 'Erreur lors du téléchargement',

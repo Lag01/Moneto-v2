@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useEffect } from 'react';
 import { useAppStore } from '@/store';
-import LayoutWithNav from '@/app/layout-with-nav';
+import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import { formatDate } from '@/lib/financial';
 import { formatCurrency } from '@/lib/financial';
 import { getPlanSummary } from '@/lib/monthly-plan';

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { monthlyPlanToRow, rowToMonthlyPlan } from '@/lib/supabase/types';
+import { monthlyPlanToRow, rowToMonthlyPlan } from '@/lib/neon/types';
 import { createMockMonthlyPlan, createMockPlanRow } from '../helpers/test-data';
 
-describe('Conversion de types Supabase', () => {
+describe('Conversion de types Neon', () => {
   const userId = 'test-user-123';
 
   describe('monthlyPlanToRow', () => {

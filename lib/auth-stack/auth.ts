@@ -1,4 +1,3 @@
-import { stackServerApp } from '@/stack/server';
 import type { StackClientUser } from '@stackframe/stack';
 
 export interface User {
@@ -23,15 +22,11 @@ function toAppUser(stackUser: StackClientUser): User {
   };
 }
 
+// Version client-only (sans STACK_SECRET_SERVER_KEY)
 export async function getCurrentUser(): Promise<User | null> {
-  try {
-    const user = await stackServerApp.getUser();
-    if (!user) return null;
-    return toAppUser(user);
-  } catch (error) {
-    console.error('Erreur récupération utilisateur:', error);
-    return null;
-  }
+  // Cette fonction sera remplacée par useUser() hook côté client
+  // Elle n'est plus nécessaire en mode client-only
+  return null;
 }
 
 export async function signOut(): Promise<AuthResult> {

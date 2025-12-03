@@ -21,6 +21,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const monthlyPlans = useAppStore((state) => state.monthlyPlans);
   const dataMigrationStatus = useAppStore((state) => state.dataMigrationStatus);
   const setDataMigrationStatus = useAppStore((state) => state.setDataMigrationStatus);
+  const downloadPlansFromCloud = useAppStore((state) => state.downloadPlansFromCloud);
+  const syncWithCloud = useAppStore((state) => state.syncWithCloud);
 
   const [showMigrationModal, setShowMigrationModal] = useState(false);
 
@@ -34,10 +36,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         isAuthenticated: true,
       };
       setUser(appUser);
+
+      // Synchroniser avec le cloud (inclut déjà le téléchargement)
+      syncWithCloud();
     } else {
       setUser(null);
     }
-  }, [stackUser, setUser]);
+  }, [stackUser, setUser, downloadPlansFromCloud, syncWithCloud]);
 
   useEffect(() => {
     // Vérifier si on doit proposer la migration

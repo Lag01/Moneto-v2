@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useAppStore, type FixedItem } from '@/store';
-import LayoutWithNav from '@/app/layout-with-nav';
+import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import IncomeExpenseForm from '@/components/IncomeExpenseForm';
 import { formatCurrency } from '@/lib/financial';
 import { calculateAvailableAmount } from '@/lib/monthly-plan';

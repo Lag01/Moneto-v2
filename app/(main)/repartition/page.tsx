@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store';
-import LayoutWithNav from '@/app/layout-with-nav';
+import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import EnvelopeAllocator from '@/components/EnvelopeAllocator';
 import { calculateAvailableAmount, getTotalPercentage } from '@/lib/monthly-plan';
 import { useTutorialContext } from '@/context/TutorialContext';
