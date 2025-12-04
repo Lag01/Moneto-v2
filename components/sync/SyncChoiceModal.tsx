@@ -164,7 +164,7 @@ export default function SyncChoiceModal({
                   avec les plans locaux.
                 </p>
                 <ul className="text-xs text-slate-500 dark:text-slate-500 mt-3 space-y-1">
-                  <li>✓ Même comportement que l'option recommandée</li>
+                  <li>✓ Même comportement que l&apos;option recommandée</li>
                   <li>✓ Fusion automatique</li>
                 </ul>
               </div>
