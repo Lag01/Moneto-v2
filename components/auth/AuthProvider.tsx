@@ -5,6 +5,8 @@ import { useUser } from '@stackframe/stack';
 import { useAppStore } from '@/store';
 import { useSafeSync } from '@/hooks/useSafeSync';
 import LocalDataMigrationModal from './LocalDataMigrationModal';
+import SyncChoiceModal from '@/components/sync/SyncChoiceModal';
+import { downloadPlansFromCloud } from '@/lib/neon/sync';
 
 /**
  * AuthProvider - Initialise l'authentification au chargement de l'application
@@ -24,6 +26,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const setDataMigrationStatus = useAppStore((state) => state.setDataMigrationStatus);
 
   const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [cloudPlansCount, setCloudPlansCount] = useState(0);
 
   // Hook de synchronisation sécurisée (attend la réhydratation complète)
   useSafeSync();
@@ -88,9 +92,40 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     });
   }, [user, monthlyPlans.length, dataMigrationStatus, setDataMigrationStatus]);
 
+  // Afficher la modal de choix de synchronisation à chaque login
+  useEffect(() => {
+    if (!user) {
+      // Pas d'utilisateur connecté, pas de modal
+      return;
+    }
+
+    // Compter les plans cloud à chaque login
+    const fetchCloudPlansCount = async () => {
+      try {
+        const result = await downloadPlansFromCloud(user.id);
+        if (result.success && result.plans) {
+          setCloudPlansCount(result.plans.length);
+          // Afficher la modal à CHAQUE login
+          setShowSyncModal(true);
+        }
+      } catch (error) {
+        console.error('[AuthProvider] Erreur lors du comptage des plans cloud:', error);
+      }
+    };
+
+    fetchCloudPlansCount();
+  }, [user]);
+
   const handleCloseMigrationModal = () => {
     setShowMigrationModal(false);
   };
+
+  const handleCloseSyncModal = () => {
+    setShowSyncModal(false);
+  };
+
+  // Filtrer les plans tutoriels pour le comptage
+  const nonTutorialPlans = monthlyPlans.filter((p) => !p.isTutorial);
 
   return (
     <>
@@ -99,6 +134,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         isOpen={showMigrationModal}
         localPlansCount={monthlyPlans.length}
         onClose={handleCloseMigrationModal}
+      />
+      <SyncChoiceModal
+        isOpen={showSyncModal}
+        localPlansCount={nonTutorialPlans.length}
+        cloudPlansCount={cloudPlansCount}
+        onClose={handleCloseSyncModal}
       />
     </>
   );

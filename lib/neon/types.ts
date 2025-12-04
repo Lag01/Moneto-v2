@@ -26,12 +26,12 @@ export function monthlyPlanToRow(
   return {
     user_id: userId,
     plan_id: plan.id,
-    name: `Plan ${plan.month}`,
+    name: plan.name, // Utiliser le nom personnalisé du plan
     data: {
-      month: plan.month,
       fixedIncomes: plan.fixedIncomes,
       fixedExpenses: plan.fixedExpenses,
       envelopes: plan.envelopes,
+      isTutorial: plan.isTutorial, // Stocker le flag tutoriel dans data JSONB
     },
     created_at: plan.createdAt,
     updated_at: plan.updatedAt,
@@ -52,12 +52,13 @@ export function rowToMonthlyPlan(row: MonthlyPlanRow): MonthlyPlan {
 
   return {
     id: row.plan_id,
-    month: data.month || '',
+    name: row.name, // Récupérer le nom depuis la colonne dédiée
     fixedIncomes: data.fixedIncomes || [],
     fixedExpenses: data.fixedExpenses || [],
     envelopes: data.envelopes || [],
     calculatedResults: emptyCalculatedResults,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    isTutorial: data.isTutorial, // Récupérer le flag tutoriel depuis data JSONB
   };
 }

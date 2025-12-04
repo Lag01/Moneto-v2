@@ -50,7 +50,7 @@ export async function uploadPlanToCloudWithRetry(
       if (result.success) {
         if (attempt > 1) {
           console.log(
-            `[Upload] Réussi après ${attempt} tentatives pour plan ${plan.month}`
+            `[Upload] Réussi après ${attempt} tentatives pour plan "${plan.name}"`
           );
         }
         return result;
@@ -60,7 +60,7 @@ export async function uploadPlanToCloudWithRetry(
 
       if (attempt < maxRetries) {
         console.warn(
-          `[Upload] Tentative ${attempt}/${maxRetries} échouée pour plan ${plan.month}, retry dans ${delayMs}ms`,
+          `[Upload] Tentative ${attempt}/${maxRetries} échouée pour plan "${plan.name}", retry dans ${delayMs}ms`,
           lastError
         );
         await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -68,7 +68,7 @@ export async function uploadPlanToCloudWithRetry(
       }
     } catch (error) {
       console.error(
-        `[Upload] Erreur inattendue tentative ${attempt} pour plan ${plan.month}:`,
+        `[Upload] Erreur inattendue tentative ${attempt} pour plan "${plan.name}":`,
         error
       );
       lastError = {
@@ -86,7 +86,7 @@ export async function uploadPlanToCloudWithRetry(
 
   // Toutes les tentatives ont échoué
   console.error(
-    `[Upload] Échec définitif après ${maxRetries} tentatives pour plan ${plan.month}`
+    `[Upload] Échec définitif après ${maxRetries} tentatives pour plan "${plan.name}"`
   );
   return {
     success: false,
@@ -231,7 +231,7 @@ export async function syncPlan(
       // Notification de conflit (client-side uniquement)
       if (typeof window !== 'undefined') {
         import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-          toastNotifications.conflictResolved(remotePlan.month, 'remote');
+          toastNotifications.conflictResolved(remotePlan.name, 'remote');
         });
       }
 
@@ -242,7 +242,7 @@ export async function syncPlan(
       // Notification de conflit (client-side uniquement)
       if (typeof window !== 'undefined') {
         import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-          toastNotifications.conflictResolved(localPlan.month, 'local');
+          toastNotifications.conflictResolved(localPlan.name, 'local');
         });
       }
 
@@ -307,9 +307,27 @@ export async function syncAllPlans(
   error?: SyncError;
 }> {
   try {
+    // ⚠️ IMPORTANT : Filtrer les plans tutoriels AVANT la synchronisation
+    // Les plans tutoriels ne doivent JAMAIS être uploadés vers le cloud
+    const plansToSync = localPlans.filter((plan) => !plan.isTutorial);
+
+    if (plansToSync.length === 0) {
+      console.log('[Sync] Aucun plan à synchroniser (plans tutoriels exclus)');
+      return {
+        success: true,
+        plans: localPlans, // Retourner tous les plans locaux (y compris tutoriels)
+        synced: 0,
+        conflicts: 0,
+      };
+    }
+
+    console.log(
+      `[Sync] Synchronisation de ${plansToSync.length} plans (${localPlans.length - plansToSync.length} tutoriels exclus)`
+    );
+
     // Map pour tracker les plans locaux non encore synchronisés
     const localPlansMap = new Map<string, MonthlyPlan>(
-      localPlans.map((p) => [p.id, p])
+      plansToSync.map((p) => [p.id, p])
     );
 
     const updatedPlans: MonthlyPlan[] = [];
@@ -318,8 +336,8 @@ export async function syncAllPlans(
 
     // Batching : traiter les plans par groupes de 5 en parallèle
     const BATCH_SIZE = 5;
-    for (let i = 0; i < localPlans.length; i += BATCH_SIZE) {
-      const batch = localPlans.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < plansToSync.length; i += BATCH_SIZE) {
+      const batch = plansToSync.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(
         batch.map((plan) => syncPlan(plan, userId))
       );
@@ -347,7 +365,7 @@ export async function syncAllPlans(
     if (unsyncedLocalPlans.length > 0) {
       console.log(
         `[Sync] ${unsyncedLocalPlans.length} plans locaux non synchronisés conservés :`,
-        unsyncedLocalPlans.map((p) => p.month).join(', ')
+        unsyncedLocalPlans.map((p) => p.name).join(', ')
       );
       updatedPlans.push(...unsyncedLocalPlans);
     }
@@ -355,7 +373,7 @@ export async function syncAllPlans(
     // Télécharger les plans cloud uniquement
     const downloadResult = await downloadPlansFromCloud(userId);
     if (downloadResult.success && downloadResult.plans) {
-      const localPlanIds = new Set(localPlans.map((p) => p.id));
+      const localPlanIds = new Set(plansToSync.map((p) => p.id));
       const cloudOnlyPlans = downloadResult.plans.filter(
         (p) => !localPlanIds.has(p.id)
       );
@@ -363,11 +381,20 @@ export async function syncAllPlans(
       if (cloudOnlyPlans.length > 0) {
         console.log(
           `[Sync] ${cloudOnlyPlans.length} nouveaux plans depuis le cloud :`,
-          cloudOnlyPlans.map((p) => p.month).join(', ')
+          cloudOnlyPlans.map((p) => p.name).join(', ')
         );
       }
 
       updatedPlans.push(...cloudOnlyPlans);
+    }
+
+    // ⚠️ IMPORTANT : Ajouter les plans tutoriels locaux (non synchronisés)
+    const tutorialPlans = localPlans.filter((p) => p.isTutorial);
+    if (tutorialPlans.length > 0) {
+      console.log(
+        `[Sync] ${tutorialPlans.length} plans tutoriels conservés localement`
+      );
+      updatedPlans.push(...tutorialPlans);
     }
 
     return {

@@ -15,25 +15,21 @@ export interface Notification {
 }
 
 /**
- * Vérifie le statut du plan du mois en cours
+ * Vérifie le statut d'un plan donné
  */
-export function getCurrentMonthStatus(plans: MonthlyPlan[]): {
+export function getCurrentPlanStatus(currentPlan: MonthlyPlan | null): {
   currentMonthPlan?: MonthlyPlan;
   notifications: Notification[];
 } {
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-  const currentMonthPlan = plans.find((p) => p.month === currentMonth);
   const notifications: Notification[] = [];
 
-  // Pas de plan pour le mois en cours
-  if (!currentMonthPlan) {
+  // Pas de plan sélectionné
+  if (!currentPlan) {
     notifications.push({
-      id: 'no-current-month',
+      id: 'no-current-plan',
       type: 'warning',
-      title: 'Aucun plan pour le mois en cours',
-      message: `Vous n'avez pas encore créé de plan pour ${now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}. Créez-en un pour commencer à gérer votre budget.`,
+      title: 'Aucun plan sélectionné',
+      message: 'Créez ou sélectionnez un plan pour commencer à gérer votre budget.',
       action: {
         label: 'Créer un plan',
         href: '/dashboard',
@@ -41,6 +37,8 @@ export function getCurrentMonthStatus(plans: MonthlyPlan[]): {
     });
     return { notifications };
   }
+
+  const currentMonthPlan = currentPlan;
 
   // Plan incomplet : pas de revenus
   if (currentMonthPlan.fixedIncomes.length === 0) {
@@ -125,7 +123,7 @@ export function getCurrentMonthStatus(plans: MonthlyPlan[]): {
       id: 'all-good',
       type: 'success',
       title: 'Budget en ordre !',
-      message: `Votre budget pour ${now.toLocaleDateString('fr-FR', { month: 'long' })} est complet et validé. Félicitations !`,
+      message: `Votre plan "${currentPlan.name}" est complet et validé. Félicitations !`,
       action: {
         label: 'Voir la visualisation',
         href: '/visualisation',

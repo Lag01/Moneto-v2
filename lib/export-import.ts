@@ -7,7 +7,8 @@ export interface ExportedPlanData {
   version: string;
   exportDate: string;
   plan: {
-    month: string;
+    name: string;
+    month?: string; // Rétrocompatibilité : accepté à l'import mais plus exporté
     fixedIncomes: MonthlyPlan['fixedIncomes'];
     fixedExpenses: MonthlyPlan['fixedExpenses'];
     envelopes: MonthlyPlan['envelopes'];
@@ -20,10 +21,10 @@ export interface ExportedPlanData {
  */
 export function exportMonthlyPlanToJSON(plan: MonthlyPlan): void {
   const exportData: ExportedPlanData = {
-    version: '1.0',
+    version: '2.0', // Incrémentation pour nouveau format
     exportDate: new Date().toISOString(),
     plan: {
-      month: plan.month,
+      name: plan.name,
       fixedIncomes: plan.fixedIncomes,
       fixedExpenses: plan.fixedExpenses,
       envelopes: plan.envelopes,
@@ -35,9 +36,11 @@ export function exportMonthlyPlanToJSON(plan: MonthlyPlan): void {
   const blob = new Blob([jsonString], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
+  // Générer nom de fichier sûr (remplacer caractères interdits)
+  const safeFileName = plan.name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
   const link = document.createElement('a');
   link.href = url;
-  link.download = `moneto-plan-${plan.month}.json`;
+  link.download = `moneto-plan-${safeFileName}.json`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -49,10 +52,10 @@ export function exportMonthlyPlanToJSON(plan: MonthlyPlan): void {
  */
 export function exportAllPlansToJSON(plans: MonthlyPlan[]): void {
   const exportData = {
-    version: '1.0',
+    version: '2.0', // Incrémentation pour nouveau format
     exportDate: new Date().toISOString(),
     plans: plans.map((plan) => ({
-      month: plan.month,
+      name: plan.name,
       fixedIncomes: plan.fixedIncomes,
       fixedExpenses: plan.fixedExpenses,
       envelopes: plan.envelopes,
@@ -100,11 +103,25 @@ function validateImportedPlan(data: any): {
 
   const { plan } = data;
 
-  // Vérifier le mois
-  if (!plan.month || typeof plan.month !== 'string') {
-    errors.push('Mois invalide ou manquant');
-  } else if (!/^\d{4}-\d{2}$/.test(plan.month)) {
-    errors.push('Format du mois invalide (attendu: YYYY-MM)');
+  // Rétrocompatibilité : Convertir month → name si nécessaire
+  if (!plan.name && plan.month) {
+    // Ancien format détecté, convertir month en name
+    try {
+      const monthDate = new Date(plan.month + '-01');
+      plan.name = monthDate.toLocaleDateString('fr-FR', {
+        month: 'long',
+        year: 'numeric',
+      });
+      plan.name = plan.name.charAt(0).toUpperCase() + plan.name.slice(1);
+      console.log(`[Import] Conversion ancien format : "${plan.month}" → "${plan.name}"`);
+    } catch {
+      plan.name = `Plan ${plan.month}`;
+    }
+  }
+
+  // Vérifier le nom (obligatoire dans le nouveau format)
+  if (!plan.name || typeof plan.name !== 'string') {
+    errors.push('Nom du plan invalide ou manquant');
   }
 
   // Vérifier fixedIncomes

@@ -64,7 +64,7 @@ export interface CalculatedResults {
  */
 export interface MonthlyPlan {
   id: string;
-  month: string; // Format: YYYY-MM
+  name: string; // Nom personnalisé du plan (ex: "Budget Janvier 2025", "Vacances été", etc.)
   fixedIncomes: FixedItem[];
   fixedExpenses: FixedItem[];
   envelopes: Envelope[];
@@ -128,11 +128,12 @@ interface AppState {
   // Plans mensuels
   monthlyPlans: MonthlyPlan[];
   currentMonthId: string | null;
-  addMonthlyPlan: (month: string) => string;
+  addMonthlyPlan: (name: string) => string;
   updateMonthlyPlan: (id: string, plan: Partial<MonthlyPlan>) => void;
+  updateMonthlyPlanName: (id: string, newName: string) => void;
   deleteMonthlyPlan: (id: string) => void;
   getMonthlyPlan: (id: string) => MonthlyPlan | undefined;
-  copyMonthlyPlan: (sourceId: string, newMonth: string) => string;
+  copyMonthlyPlan: (sourceId: string, newName?: string) => string;
   setCurrentMonth: (id: string | null) => void;
   recalculatePlan: (id: string) => void;
   normalizeEnvelopesForPlan: (id: string) => void;
@@ -323,7 +324,7 @@ export const useAppStore = create<AppState>()(
       },
 
       // Actions pour les plans mensuels
-      addMonthlyPlan: (month: string) => {
+      addMonthlyPlan: (name: string) => {
         const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
         const emptyResults: CalculatedResults = {
@@ -337,7 +338,7 @@ export const useAppStore = create<AppState>()(
 
         const newPlan: MonthlyPlan = {
           id: planId,
-          month,
+          name, // Nom personnalisé fourni par l'utilisateur
           fixedIncomes: [],
           fixedExpenses: [],
           envelopes: [],
@@ -359,31 +360,31 @@ export const useAppStore = create<AppState>()(
             uploadPlanToCloudWithRetry(newPlan, user.id, 3, 1000)
               .then((result) => {
                 if (result.success) {
-                  console.log(`[Store] Plan ${month} uploadé avec succès`);
+                  console.log(`[Store] Plan "${name}" uploadé avec succès`);
 
                   // Toast de succès
                   if (typeof window !== 'undefined') {
                     import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-                      toastNotifications.planCreated(month);
+                      toastNotifications.planCreated(name);
                     });
                   }
                 } else {
                   // Upload échoué MAIS plan reste local
                   console.error(
-                    `[Store] Échec upload plan ${month}, conservé en local:`,
+                    `[Store] Échec upload plan "${name}", conservé en local:`,
                     result.error
                   );
 
                   // Toast d'avertissement
                   if (typeof window !== 'undefined') {
                     import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-                      toastNotifications.planCreatedLocalOnly(month);
+                      toastNotifications.planCreatedLocalOnly(name);
                     });
                   }
                 }
               })
               .catch((error) => {
-                console.error(`[Store] Erreur inattendue upload plan ${month}:`, error);
+                console.error(`[Store] Erreur inattendue upload plan "${name}":`, error);
               });
           });
         }
@@ -419,6 +420,42 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      updateMonthlyPlanName: (id: string, newName: string) => {
+        const currentPlan = get().monthlyPlans.find((p) => p.id === id);
+        if (!currentPlan) return;
+
+        // Vérifier que le nom est valide
+        if (!newName || newName.trim().length === 0) {
+          console.warn('[Store] Nom de plan invalide, opération annulée');
+          return;
+        }
+
+        // Mettre à jour uniquement le nom du plan
+        set((state) => ({
+          monthlyPlans: state.monthlyPlans.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  name: newName.trim(),
+                  updatedAt: new Date().toISOString(),
+                }
+              : p
+          ),
+        }));
+
+        console.log(`[Store] Plan "${currentPlan.name}" renommé en "${newName.trim()}"`);
+
+        // Auto-sync avec debounce si utilisateur connecté
+        const user = get().user;
+        if (user) {
+          import('@/lib/neon/sync').then(({ debouncedSync }) => {
+            debouncedSync(() => {
+              get().syncWithCloud();
+            });
+          });
+        }
+      },
+
       deleteMonthlyPlan: (id: string) => {
         set((state) => ({
           monthlyPlans: state.monthlyPlans.filter((p) => p.id !== id),
@@ -440,14 +477,14 @@ export const useAppStore = create<AppState>()(
         return get().monthlyPlans.find((p) => p.id === id);
       },
 
-      copyMonthlyPlan: (sourceId: string, newMonth: string) => {
+      copyMonthlyPlan: (sourceId: string, newName?: string) => {
         const sourcePlan = get().monthlyPlans.find((p) => p.id === sourceId);
         if (!sourcePlan) return '';
 
         const newPlan: MonthlyPlan = {
           ...sourcePlan,
           id: `plan-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          month: newMonth,
+          name: newName || `${sourcePlan.name} (Copie)`, // Ajouter "(Copie)" si pas de nouveau nom
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -548,9 +585,34 @@ export const useAppStore = create<AppState>()(
           lastCalculated: now,
         };
 
+        // Déterminer le nom du plan (rétrocompatibilité avec l'ancien champ month)
+        let planName: string;
+        if (planData.name) {
+          planName = planData.name;
+        } else if ((planData as any).month) {
+          // Conversion de l'ancien format month (YYYY-MM) vers name
+          try {
+            const monthDate = new Date((planData as any).month + '-01');
+            planName = monthDate.toLocaleDateString('fr-FR', {
+              month: 'long',
+              year: 'numeric',
+            });
+            planName = planName.charAt(0).toUpperCase() + planName.slice(1);
+          } catch {
+            planName = `Plan ${(planData as any).month}`;
+          }
+        } else {
+          // Nom par défaut basé sur la date actuelle
+          const defaultName = new Date().toLocaleDateString('fr-FR', {
+            month: 'long',
+            year: 'numeric',
+          });
+          planName = defaultName.charAt(0).toUpperCase() + defaultName.slice(1);
+        }
+
         const newPlan: MonthlyPlan = {
           id: planId,
-          month: planData.month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+          name: planName,
           fixedIncomes,
           fixedExpenses,
           envelopes,
@@ -720,7 +782,7 @@ export const useAppStore = create<AppState>()(
 
             console.log(`[Sync] Téléchargement réussi : ${cloudOnlyPlans.length} nouveaux plans depuis le cloud`);
             if (cloudOnlyPlans.length > 0) {
-              console.log(`[Sync] Plans téléchargés :`, cloudOnlyPlans.map(p => p.month).join(', '));
+              console.log(`[Sync] Plans téléchargés :`, cloudOnlyPlans.map(p => p.name).join(', '));
             }
           } else {
             state.setSyncStatus({
@@ -778,11 +840,11 @@ export const useAppStore = create<AppState>()(
               if (result.success) {
                 migratedCount++;
               } else {
-                errors.push(`Plan ${plan.month}: ${result.error}`);
+                errors.push(`Plan ${plan.name}: ${result.error}`);
               }
             } catch (error) {
               console.error(`Erreur lors de l'upload du plan ${plan.id}:`, error);
-              errors.push(`Plan ${plan.month}: erreur inattendue`);
+              errors.push(`Plan ${plan.name}: erreur inattendue`);
             }
           }
 
@@ -841,10 +903,56 @@ export const useAppStore = create<AppState>()(
     {
       name: 'moneto-storage',
       storage: createJSONStorage(() => customStorage),
-      version: 2, // Version du store pour migration future
+      version: 3, // ⚠️ MIGRATION V3 : Suppression du champ month → ajout du champ name
+      migrate: (persistedState: any, version: number) => {
+        // Migration v2 → v3 : Supprimer month, ajouter name
+        if (version < 3) {
+          console.log('[Migration v3] Conversion month → name...');
+
+          if (persistedState.monthlyPlans && Array.isArray(persistedState.monthlyPlans)) {
+            persistedState.monthlyPlans = persistedState.monthlyPlans.map((plan: any) => {
+              // Si le plan a déjà un name, on le garde
+              if (plan.name) {
+                // Supprimer month même si name existe
+                delete plan.month;
+                return plan;
+              }
+
+              // Sinon, générer name depuis month si disponible
+              if (plan.month) {
+                try {
+                  const monthDate = new Date(plan.month + '-01');
+                  plan.name = monthDate.toLocaleDateString('fr-FR', {
+                    month: 'long',
+                    year: 'numeric',
+                  });
+                  // Capitaliser la première lettre (ex: "janvier" → "Janvier")
+                  plan.name = plan.name.charAt(0).toUpperCase() + plan.name.slice(1);
+                } catch {
+                  // Si la conversion échoue, utiliser un nom par défaut
+                  plan.name = `Plan ${plan.month || plan.id.substring(5, 13)}`;
+                }
+                // Supprimer le champ month
+                delete plan.month;
+              } else {
+                // Aucun month ni name : générer un nom par défaut
+                plan.name = `Plan ${plan.id.substring(5, 13)}`;
+              }
+
+              return plan;
+            });
+
+            console.log(`[Migration v3] ${persistedState.monthlyPlans.length} plans migrés`);
+          }
+        }
+
+        return persistedState;
+      },
       onRehydrateStorage: () => (state) => {
         // Callback appelé après la restauration depuis le stockage
         if (!state) return;
+
+        console.log('[Store] Réhydratation...', state.monthlyPlans.length, 'plans');
 
         // Recalculer tous les plans après restauration
         state.monthlyPlans.forEach((plan) => {

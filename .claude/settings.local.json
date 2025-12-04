@@ -64,7 +64,8 @@
       "Bash(find:*)",
       "mcp__stack-auth__list_available_docs",
       "mcp__stack-auth__get_docs_by_id",
-      "Bash(timeout 5 grep:*)"
+      "Bash(timeout 5 grep:*)",
+      "mcp__neon__run_sql"
     ],
     "deny": [],
     "ask": []

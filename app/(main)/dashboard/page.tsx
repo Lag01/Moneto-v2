@@ -18,6 +18,7 @@ import { useTutorial } from '@/hooks/useTutorial';
 import TutorialWelcomeModal from '@/components/tutorial/TutorialWelcomeModal';
 import TutorialDisclaimerModal from '@/components/tutorial/TutorialDisclaimerModal';
 import LocalDataMigrationModal from '@/components/auth/LocalDataMigrationModal';
+import RenamePlanModal from '@/components/plans/RenamePlanModal';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function DashboardPage() {
     addMonthlyPlan,
     setCurrentMonth,
     deleteMonthlyPlan,
+    updateMonthlyPlanName,
     importMonthlyPlanFromData,
     userSettings,
     updateUserSettings,
@@ -39,6 +41,7 @@ export default function DashboardPage() {
   const [showBetaWarning, setShowBetaWarning] = useState(true);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [showMigrationBanner, setShowMigrationBanner] = useState(true);
+  const [renamingPlanId, setRenamingPlanId] = useState<string | null>(null);
 
   // Tutoriel
   const { showWelcomeModal, showDisclaimerModal, setShowWelcomeModal, startTutorial, startTutorialAfterDisclaimer } = useTutorialContext();
@@ -157,11 +160,11 @@ export default function DashboardPage() {
       const result = await importMonthlyPlanFromJSON(file);
 
       if (result.success && result.plan) {
-        // Vérifier si un plan existe déjà pour ce mois
-        const existingPlan = monthlyPlans.find((p) => p.month === result.plan!.month);
+        // Vérifier si un plan existe déjà avec le même nom
+        const existingPlan = monthlyPlans.find((p) => p.name === result.plan!.name);
         if (existingPlan) {
           const confirm = window.confirm(
-            `Un plan existe déjà pour ${result.plan.month}. Voulez-vous importer quand même ?`
+            `Un plan nommé "${result.plan.name}" existe déjà. Voulez-vous importer quand même ?`
           );
           if (!confirm) {
             return;
@@ -170,7 +173,7 @@ export default function DashboardPage() {
 
         // Importer le plan
         const newPlanId = importMonthlyPlanFromData(result.plan);
-        setImportSuccess(`Plan ${result.plan.month} importé avec succès !`);
+        setImportSuccess(`Plan "${result.plan.name}" importé avec succès !`);
 
         // Réinitialiser l'input file
         if (fileInputRef.current) {
@@ -198,7 +201,10 @@ export default function DashboardPage() {
     }
   };
 
-  const sortedPlans = [...monthlyPlans].sort((a, b) => b.month.localeCompare(a.month));
+  // Filtrer les plans tutoriel et trier par date de création (plus récent en premier)
+  const sortedPlans = [...monthlyPlans]
+    .filter((plan) => !plan.isTutorial)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <LayoutWithNav>
@@ -496,16 +502,11 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-3 md:space-y-4">
               <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4">
-                Plans mensuels ({monthlyPlans.length})
+                Plans mensuels ({sortedPlans.length})
               </h2>
 
               {sortedPlans.map((plan) => {
                 const summary = getPlanSummary(plan);
-                const monthDate = new Date(plan.month + '-01');
-                const monthLabel = monthDate.toLocaleDateString('fr-FR', {
-                  month: 'long',
-                  year: 'numeric',
-                });
 
                 return (
                   <div
@@ -514,8 +515,8 @@ export default function DashboardPage() {
                   >
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                       <div className="flex-1">
-                        <h3 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 capitalize mb-2">
-                          {monthLabel}
+                        <h3 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">
+                          {plan.name}
                         </h3>
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-3 md:mt-4">
@@ -563,6 +564,12 @@ export default function DashboardPage() {
                           Modifier
                         </button>
                         <button
+                          onClick={() => setRenamingPlanId(plan.id)}
+                          className="px-3 md:px-4 py-2 md:py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors text-xs md:text-sm font-medium min-h-[44px] flex items-center justify-center"
+                        >
+                          Renommer
+                        </button>
+                        <button
                           onClick={() => handleViewPlan(plan.id)}
                           className="px-3 md:px-4 py-2 md:py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors text-xs md:text-sm font-medium min-h-[44px] flex items-center justify-center"
                         >
@@ -596,6 +603,19 @@ export default function DashboardPage() {
         localPlansCount={monthlyPlans.length}
         onClose={handleCloseMigrationModal}
       />
+
+      {/* Modal de renommage */}
+      {renamingPlanId && (
+        <RenamePlanModal
+          isOpen={true}
+          currentName={monthlyPlans.find((p) => p.id === renamingPlanId)?.name || ''}
+          onRename={(newName) => {
+            updateMonthlyPlanName(renamingPlanId, newName);
+            setRenamingPlanId(null);
+          }}
+          onClose={() => setRenamingPlanId(null)}
+        />
+      )}
 
     </LayoutWithNav>
   );

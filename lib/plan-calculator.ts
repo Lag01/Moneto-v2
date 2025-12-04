@@ -50,7 +50,7 @@ export function calculatePlanResults(plan: MonthlyPlan): CalculatedResults {
  * Crée un plan avec les résultats calculés initiaux
  */
 export function createCalculatedPlan(
-  month: string,
+  name: string,
   id: string
 ): MonthlyPlan {
   const emptyResults: CalculatedResults = {
@@ -64,7 +64,7 @@ export function createCalculatedPlan(
 
   return {
     id,
-    month,
+    name,
     fixedIncomes: [],
     fixedExpenses: [],
     envelopes: [],

@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useAppStore } from '@/store';
-import { getCurrentMonthStatus } from '@/lib/notifications';
+import { getCurrentPlanStatus } from '@/lib/notifications';
 import NotificationBanner from '@/components/NotificationBanner';
 
 export default function Home() {
-  const { monthlyPlans } = useAppStore();
-  const { notifications } = getCurrentMonthStatus(monthlyPlans);
+  const { monthlyPlans, currentMonthId } = useAppStore();
+  const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId) || null;
+  const { notifications } = getCurrentPlanStatus(currentPlan);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
 
   const visibleNotifications = notifications.filter(

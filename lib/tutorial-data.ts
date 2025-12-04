@@ -67,7 +67,6 @@ export const tutorialEnvelopes: Envelope[] = [
  */
 export function createTutorialPlan(): MonthlyPlan {
   const now = new Date();
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
   const calculatedResults: CalculatedResults = {
     totalIncome: 3000,
@@ -80,7 +79,7 @@ export function createTutorialPlan(): MonthlyPlan {
 
   return {
     id: 'tutorial-plan',
-    month,
+    name: 'Plan Tutoriel', // Nom fixe pour le plan de démonstration
     fixedIncomes: tutorialIncomes,
     fixedExpenses: tutorialExpenses,
     envelopes: tutorialEnvelopes,

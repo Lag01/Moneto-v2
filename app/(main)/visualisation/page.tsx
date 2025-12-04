@@ -48,12 +48,6 @@ export default function VisualisationPage() {
     );
   }
 
-  const monthDate = new Date(currentPlan.month + '-01');
-  const monthLabel = monthDate.toLocaleDateString('fr-FR', {
-    month: 'long',
-    year: 'numeric',
-  });
-
   const summary = getPlanSummary(currentPlan);
 
   const handleChangePlan = (planId: string) => {
@@ -65,8 +59,8 @@ export default function VisualisationPage() {
       <div className="p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-4 md:mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2 capitalize">
-              Visualisation - {monthLabel}
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+              Visualisation - {currentPlan.name}
             </h1>
             <p className="text-sm md:text-base text-slate-600 dark:text-slate-400 mb-4">
               Analysez votre plan financier avec des graphiques détaillés
@@ -83,15 +77,10 @@ export default function VisualisationPage() {
                   onChange={(e) => handleChangePlan(e.target.value)}
                   className="px-3 md:px-4 py-3 md:py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px] text-sm md:text-base"
                 >
-                  {monthlyPlans.map((plan) => {
-                    const date = new Date(plan.month + '-01');
-                    const label = date.toLocaleDateString('fr-FR', {
-                      month: 'long',
-                      year: 'numeric',
-                    });
+                  {monthlyPlans.filter(p => !p.isTutorial).map((plan) => {
                     return (
-                      <option key={plan.id} value={plan.id} className="capitalize">
-                        {label}
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name}
                       </option>
                     );
                   })}

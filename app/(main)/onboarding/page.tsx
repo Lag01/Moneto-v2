@@ -46,12 +46,6 @@ export default function OnboardingPage() {
     );
   }
 
-  const monthDate = new Date(currentPlan.month + '-01');
-  const monthLabel = monthDate.toLocaleDateString('fr-FR', {
-    month: 'long',
-    year: 'numeric',
-  });
-
   const availableAmount = calculateAvailableAmount(
     currentPlan.fixedIncomes,
     currentPlan.fixedExpenses
@@ -89,11 +83,11 @@ export default function OnboardingPage() {
       <div className="p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           <div className="mb-6 md:mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2 capitalize">
-              Entrées / Sorties - {monthLabel}
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+              Entrées / Sorties - {currentPlan.name}
             </h1>
             <p className="text-sm md:text-base text-slate-600 dark:text-slate-400">
-              Définissez vos revenus et dépenses fixes pour ce mois
+              Définissez vos revenus et dépenses fixes pour ce plan
             </p>
           </div>
 

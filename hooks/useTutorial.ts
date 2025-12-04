@@ -26,7 +26,7 @@ export function useTutorial() {
     const tutorialPlan = createTutorialPlan();
 
     // Ajouter le plan manuellement au store
-    addMonthlyPlan(tutorialPlan.month);
+    addMonthlyPlan(tutorialPlan.name);
 
     // Mettre à jour avec les données du tutoriel
     const plans = useAppStore.getState().monthlyPlans;
