@@ -23,6 +23,77 @@ export interface DownloadResult {
 let syncTimeout: NodeJS.Timeout | null = null;
 const SYNC_DEBOUNCE_MS = 500;
 
+/**
+ * Upload avec retry automatique (3 tentatives, backoff exponentiel).
+ *
+ * Cette fonction est utilisée lors de la création d'un nouveau plan pour garantir
+ * que l'upload vers le cloud réussisse même en cas de problème réseau temporaire.
+ *
+ * @param plan - Le plan mensuel à uploader
+ * @param userId - L'ID de l'utilisateur
+ * @param maxRetries - Nombre maximum de tentatives (défaut: 3)
+ * @param delayMs - Délai initial entre les tentatives en ms (défaut: 1000)
+ * @returns Résultat de la synchronisation
+ */
+export async function uploadPlanToCloudWithRetry(
+  plan: MonthlyPlan,
+  userId: string,
+  maxRetries: number = 3,
+  delayMs: number = 1000
+): Promise<SyncResult> {
+  let lastError: SyncError | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await uploadPlanToCloud(plan, userId);
+
+      if (result.success) {
+        if (attempt > 1) {
+          console.log(
+            `[Upload] Réussi après ${attempt} tentatives pour plan ${plan.month}`
+          );
+        }
+        return result;
+      }
+
+      lastError = result.error;
+
+      if (attempt < maxRetries) {
+        console.warn(
+          `[Upload] Tentative ${attempt}/${maxRetries} échouée pour plan ${plan.month}, retry dans ${delayMs}ms`,
+          lastError
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs *= 2; // Exponential backoff
+      }
+    } catch (error) {
+      console.error(
+        `[Upload] Erreur inattendue tentative ${attempt} pour plan ${plan.month}:`,
+        error
+      );
+      lastError = {
+        code: 'UNKNOWN',
+        message: 'Erreur inattendue',
+        details: error,
+      };
+
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs *= 2;
+      }
+    }
+  }
+
+  // Toutes les tentatives ont échoué
+  console.error(
+    `[Upload] Échec définitif après ${maxRetries} tentatives pour plan ${plan.month}`
+  );
+  return {
+    success: false,
+    error: lastError,
+  };
+}
+
 export async function uploadPlanToCloud(
   plan: MonthlyPlan,
   userId: string
@@ -236,6 +307,11 @@ export async function syncAllPlans(
   error?: SyncError;
 }> {
   try {
+    // Map pour tracker les plans locaux non encore synchronisés
+    const localPlansMap = new Map<string, MonthlyPlan>(
+      localPlans.map((p) => [p.id, p])
+    );
+
     const updatedPlans: MonthlyPlan[] = [];
     let syncedCount = 0;
     let conflictCount = 0;
@@ -251,23 +327,46 @@ export async function syncAllPlans(
       for (const result of results) {
         if (result.success && result.plan) {
           updatedPlans.push(result.plan);
+          localPlansMap.delete(result.plan.id); // Retirer du Map (déjà synchronisé)
           syncedCount++;
           if (result.conflict) conflictCount++;
         } else {
           console.error(`Erreur sync plan:`, result.error);
           // En cas d'erreur, garder la version locale
           const failedPlan = batch.find((p) => p.id === result.plan?.id);
-          if (failedPlan) updatedPlans.push(failedPlan);
+          if (failedPlan) {
+            updatedPlans.push(failedPlan);
+            localPlansMap.delete(failedPlan.id); // Retirer du Map (déjà traité)
+          }
         }
       }
     }
 
+    // Ajouter les plans locaux non encore uploadés
+    const unsyncedLocalPlans = Array.from(localPlansMap.values());
+    if (unsyncedLocalPlans.length > 0) {
+      console.log(
+        `[Sync] ${unsyncedLocalPlans.length} plans locaux non synchronisés conservés :`,
+        unsyncedLocalPlans.map((p) => p.month).join(', ')
+      );
+      updatedPlans.push(...unsyncedLocalPlans);
+    }
+
+    // Télécharger les plans cloud uniquement
     const downloadResult = await downloadPlansFromCloud(userId);
     if (downloadResult.success && downloadResult.plans) {
       const localPlanIds = new Set(localPlans.map((p) => p.id));
       const cloudOnlyPlans = downloadResult.plans.filter(
         (p) => !localPlanIds.has(p.id)
       );
+
+      if (cloudOnlyPlans.length > 0) {
+        console.log(
+          `[Sync] ${cloudOnlyPlans.length} nouveaux plans depuis le cloud :`,
+          cloudOnlyPlans.map((p) => p.month).join(', ')
+        );
+      }
+
       updatedPlans.push(...cloudOnlyPlans);
     }
 

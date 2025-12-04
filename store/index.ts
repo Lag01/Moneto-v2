@@ -163,6 +163,10 @@ interface AppState {
   monthlyBudget: number;
   setMonthlyBudget: (budget: number) => void;
 
+  // Réhydratation
+  _hasHydrated: boolean;
+  _setHasHydrated: (value: boolean) => void;
+
   // Utilitaires
   clearAllData: () => void;
 }
@@ -257,6 +261,7 @@ export const useAppStore = create<AppState>()(
         lastProposedAt: null,
         migratedPlansCount: 0,
       },
+      _hasHydrated: false,
 
       // Actions pour les transactions
       addTransaction: (transaction) => {
@@ -341,18 +346,45 @@ export const useAppStore = create<AppState>()(
           updatedAt: new Date().toISOString(),
         };
 
+        // IMPORTANT : Créer le plan localement IMMÉDIATEMENT
         set((state) => ({
           monthlyPlans: [...state.monthlyPlans, newPlan],
           currentMonthId: newPlan.id,
         }));
 
-        // Upload vers le cloud si utilisateur connecté
+        // Upload avec retry (asynchrone, non bloquant)
         const user = get().user;
         if (user) {
-          import('@/lib/neon/sync').then(({ uploadPlanToCloud }) => {
-            uploadPlanToCloud(newPlan, user.id).catch((error) => {
-              console.error('Erreur lors de l\'upload du nouveau plan:', error);
-            });
+          import('@/lib/neon/sync').then(({ uploadPlanToCloudWithRetry }) => {
+            uploadPlanToCloudWithRetry(newPlan, user.id, 3, 1000)
+              .then((result) => {
+                if (result.success) {
+                  console.log(`[Store] Plan ${month} uploadé avec succès`);
+
+                  // Toast de succès
+                  if (typeof window !== 'undefined') {
+                    import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                      toastNotifications.planCreated(month);
+                    });
+                  }
+                } else {
+                  // Upload échoué MAIS plan reste local
+                  console.error(
+                    `[Store] Échec upload plan ${month}, conservé en local:`,
+                    result.error
+                  );
+
+                  // Toast d'avertissement
+                  if (typeof window !== 'undefined') {
+                    import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                      toastNotifications.planCreatedLocalOnly(month);
+                    });
+                  }
+                }
+              })
+              .catch((error) => {
+                console.error(`[Store] Erreur inattendue upload plan ${month}:`, error);
+              });
           });
         }
 
@@ -788,6 +820,11 @@ export const useAppStore = create<AppState>()(
         set({ monthlyBudget: budget });
       },
 
+      // Actions pour la réhydratation
+      _setHasHydrated: (value) => {
+        set({ _hasHydrated: value });
+      },
+
       // Utilitaires
       clearAllData: () => {
         set({
@@ -843,6 +880,9 @@ export const useAppStore = create<AppState>()(
           // Recalculer immédiatement les résultats
           state.recalculatePlan(plan.id);
         });
+
+        // Marquer la réhydratation comme terminée
+        state._setHasHydrated(true);
 
         console.log('Store Moneto réhydraté avec succès');
       },

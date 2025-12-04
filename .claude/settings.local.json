@@ -61,7 +61,10 @@
       "Bash(ls:*)",
       "Bash([ -f \"C:\\Users\\lumin\\Documents\\Code\\Moneto web app V2\\Test-moneto-web-app\\app\\loading.tsx\" ])",
       "Bash([ -f \"C:\\Users\\lumin\\Documents\\Code\\Moneto web app V2\\Test-moneto-web-app\\lib\\notifications.ts\" ])",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "mcp__stack-auth__list_available_docs",
+      "mcp__stack-auth__get_docs_by_id",
+      "Bash(timeout 5 grep:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,35 +1,24 @@
 import SignupForm from '@/components/auth/SignupForm';
-import Link from 'next/link';
+import AuthLayout from '@/components/auth/AuthLayout';
 
 export default function SignupPage() {
+  const benefits = [
+    'Sauvegarde automatique de tous vos plans mensuels dans le cloud',
+    'Synchronisation en temps réel sur tous vos appareils',
+    'Accédez à vos données depuis n\'importe où, à tout moment',
+    'Protection contre la perte de données avec backup automatique',
+    'Résolution intelligente des conflits entre appareils',
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo et titre */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-block">
-            <h1 className="text-4xl font-bold text-emerald-600 dark:text-emerald-400 mb-2">
-              Moneto
-            </h1>
-          </Link>
-          <p className="text-gray-600 dark:text-gray-400">
-            Gestion financière par enveloppes
-          </p>
-        </div>
-
-        {/* Formulaire d'inscription */}
-        <SignupForm />
-
-        {/* Lien retour */}
-        <div className="mt-6 text-center">
-          <Link
-            href="/dashboard"
-            className="text-sm text-gray-600 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-          >
-            ← Continuer sans compte (mode local uniquement)
-          </Link>
-        </div>
-      </div>
-    </div>
+    <AuthLayout
+      title="Créer un compte"
+      subtitle="Commencez à gérer vos finances de manière professionnelle"
+      benefits={benefits}
+      footerText="Déjà un compte ?"
+      footerLink={{ text: 'Se connecter', href: '/auth/login' }}
+    >
+      <SignupForm />
+    </AuthLayout>
   );
 }

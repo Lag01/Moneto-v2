@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '@stackframe/stack';
 import { useAppStore } from '@/store';
+import { useSafeSync } from '@/hooks/useSafeSync';
 import LocalDataMigrationModal from './LocalDataMigrationModal';
 
 /**
@@ -21,10 +22,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const monthlyPlans = useAppStore((state) => state.monthlyPlans);
   const dataMigrationStatus = useAppStore((state) => state.dataMigrationStatus);
   const setDataMigrationStatus = useAppStore((state) => state.setDataMigrationStatus);
-  const downloadPlansFromCloud = useAppStore((state) => state.downloadPlansFromCloud);
-  const syncWithCloud = useAppStore((state) => state.syncWithCloud);
 
   const [showMigrationModal, setShowMigrationModal] = useState(false);
+
+  // Hook de synchronisation sécurisée (attend la réhydratation complète)
+  useSafeSync();
 
   // Synchroniser Stack Auth user avec Zustand store
   useEffect(() => {
@@ -36,13 +38,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         isAuthenticated: true,
       };
       setUser(appUser);
-
-      // Synchroniser avec le cloud (inclut déjà le téléchargement)
-      syncWithCloud();
+      // La synchronisation est maintenant gérée par useSafeSync()
+      // qui attend la fin de la réhydratation IndexedDB
     } else {
       setUser(null);
     }
-  }, [stackUser, setUser, downloadPlansFromCloud, syncWithCloud]);
+  }, [stackUser, setUser]);
 
   useEffect(() => {
     // Vérifier si on doit proposer la migration

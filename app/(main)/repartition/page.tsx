@@ -9,11 +9,19 @@ import { useTutorialContext } from '@/context/TutorialContext';
 
 export default function RepartitionPage() {
   const router = useRouter();
-  const { monthlyPlans, currentMonthId, updateMonthlyPlan, normalizeEnvelopesForPlan } =
+  const { monthlyPlans, currentMonthId, updateMonthlyPlan, normalizeEnvelopesForPlan, setCurrentMonth } =
     useAppStore();
   const { isActive: isTutorialActive, nextStep } = useTutorialContext();
 
   const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId);
+
+  // Fallback intelligent : reset currentMonthId si le plan n'existe pas
+  if (!currentPlan && currentMonthId) {
+    console.warn(
+      `[Repartition] Plan ${currentMonthId} non trouvé, reset de currentMonthId`
+    );
+    setCurrentMonth(null);
+  }
 
   if (!currentPlan) {
     return (

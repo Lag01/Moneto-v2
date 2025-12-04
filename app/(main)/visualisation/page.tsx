@@ -17,6 +17,14 @@ export default function VisualisationPage() {
 
   const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId);
 
+  // Fallback intelligent : reset currentMonthId si le plan n'existe pas
+  if (!currentPlan && currentMonthId) {
+    console.warn(
+      `[Visualisation] Plan ${currentMonthId} non trouvé, reset de currentMonthId`
+    );
+    setCurrentMonth(null);
+  }
+
   if (!currentPlan) {
     return (
       <LayoutWithNav>

@@ -10,10 +10,18 @@ import { useTutorialContext } from '@/context/TutorialContext';
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { monthlyPlans, currentMonthId, updateMonthlyPlan } = useAppStore();
+  const { monthlyPlans, currentMonthId, updateMonthlyPlan, setCurrentMonth } = useAppStore();
   const { isActive: isTutorialActive, nextStep } = useTutorialContext();
 
   const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId);
+
+  // Fallback intelligent : reset currentMonthId si le plan n'existe pas
+  if (!currentPlan && currentMonthId) {
+    console.warn(
+      `[Onboarding] Plan ${currentMonthId} non trouvé, reset de currentMonthId`
+    );
+    setCurrentMonth(null);
+  }
 
   if (!currentPlan) {
     return (
