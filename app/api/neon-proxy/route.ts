@@ -18,13 +18,25 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import postgres from 'postgres';
 
-// Vérifier que DATABASE_URL est définie
-function checkDatabaseUrl() {
+// Singleton SQL client
+let sql: ReturnType<typeof postgres> | null = null;
+
+function getSqlClient() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL non définie');
   }
+
+  if (!sql) {
+    sql = postgres(process.env.DATABASE_URL, {
+      // Configuration pour Neon serverless
+      ssl: 'require',
+      max: 1, // Limite de connexions pour serverless
+    });
+  }
+
+  return sql;
 }
 
 // Force la route à être dynamique (pas de pre-rendering au build)
@@ -92,16 +104,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       console.warn('[Neon Proxy] ATTENTION : Requête sans filtre user_id détectée');
     }
 
-    // Vérifier que DATABASE_URL est définie
-    checkDatabaseUrl();
-
-    // Exécuter la requête via @vercel/postgres
-    // @vercel/postgres supporte nativement les paramètres ($1, $2, etc.)
-    const result = await sql.query(query, processedParams);
+    // Exécuter la requête via postgres.js
+    const sql = getSqlClient();
+    const result = await sql.unsafe(query, processedParams);
 
     return NextResponse.json({
       success: true,
-      data: result.rows, // @vercel/postgres retourne { rows: [...], rowCount, ... }
+      data: Array.isArray(result) ? result : [], // postgres.js retourne directement un array
     });
   } catch (error: any) {
     console.error('[Neon Proxy] Erreur:', error);

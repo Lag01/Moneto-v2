@@ -9,7 +9,7 @@
  */
 
 import { config } from 'dotenv';
-import { neon } from '@neondatabase/serverless';
+import postgres from 'postgres';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -25,7 +25,9 @@ async function backupNeonData() {
   }
 
   console.log('🔄 Connexion à Neon...');
-  const sql = neon(databaseUrl);
+  const sql = postgres(databaseUrl, {
+    ssl: 'require',
+  });
 
   try {
     // Récupérer toutes les données
