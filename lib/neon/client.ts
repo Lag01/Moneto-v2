@@ -6,8 +6,18 @@
  * - Côté SERVEUR : utilise Neon directement (pour API Routes et scripts)
  */
 
-import { neon } from '@neondatabase/serverless';
+import { neon, neonConfig } from '@neondatabase/serverless';
 import type { NeonProxyRequest, NeonProxyResponse } from '@/app/api/neon-proxy/route';
+
+// Configure Neon pour Node.js runtime (serveur uniquement)
+if (typeof window === 'undefined') {
+  // Dynamic import de ws pour éviter l'erreur côté client
+  import('ws').then((wsModule) => {
+    neonConfig.webSocketConstructor = wsModule.default;
+  }).catch(() => {
+    // Ignore l'erreur si ws n'est pas disponible (ne devrait pas arriver)
+  });
+}
 
 export interface SyncError {
   code: 'NETWORK' | 'AUTH' | 'SERVER' | 'CONFLICT' | 'UNKNOWN';

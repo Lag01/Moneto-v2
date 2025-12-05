@@ -18,7 +18,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
+import { neon, neonConfig } from '@neondatabase/serverless';
+import ws from 'ws';
+
+// Configure Neon pour utiliser ws sur Node.js runtime
+neonConfig.webSocketConstructor = ws;
 
 // Client Neon côté serveur uniquement (initialisation lazy)
 let sql: ReturnType<typeof neon> | null = null;
@@ -26,7 +30,6 @@ let sql: ReturnType<typeof neon> | null = null;
 function getSqlClient() {
   if (!sql) {
     const databaseUrl = process.env.DATABASE_URL;
-    console.log('[getSqlClient] DATABASE_URL:', databaseUrl ? `définie (${databaseUrl.length} chars)` : 'UNDEFINED');
     if (!databaseUrl) {
       throw new Error('DATABASE_URL non définie');
     }
@@ -56,10 +59,6 @@ export interface NeonProxyResponse {
 
 export async function POST(request: NextRequest): Promise<NextResponse<NeonProxyResponse>> {
   try {
-    // 🔍 DEBUG : Vérifier les variables d'environnement
-    console.log('[Neon Proxy] DATABASE_URL existe:', !!process.env.DATABASE_URL);
-    console.log('[Neon Proxy] DATABASE_URL length:', process.env.DATABASE_URL?.length);
-
     // Import dynamique de stackServerApp (évite l'initialisation au build)
     const { stackServerApp } = await import('@/stack/server');
 
@@ -170,7 +169,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
         error: {
           code: 'DATABASE_ERROR',
           message: 'Erreur lors de l\'exécution de la requête',
-          details: error.message, // ⚠️ TEMPORAIRE : afficher détails en prod pour debug
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined,
         },
       },
       { status: 500 }
