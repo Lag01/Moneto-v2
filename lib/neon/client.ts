@@ -15,8 +15,8 @@ if (typeof window === 'undefined') {
   try {
     // Import synchrone de ws pour Node.js uniquement
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const ws = require('ws');
-    neonConfig.webSocketConstructor = ws;
+    const { WebSocket } = require('ws');
+    neonConfig.webSocketConstructor = WebSocket;
   } catch (error) {
     // ws n'est pas disponible (ne devrait pas arriver sur le serveur)
     console.error('[Neon Client] ws non disponible:', error);

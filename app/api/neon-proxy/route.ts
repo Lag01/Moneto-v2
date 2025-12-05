@@ -19,10 +19,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { neon, neonConfig } from '@neondatabase/serverless';
-import ws from 'ws';
+import { WebSocket } from 'ws';
 
 // Configure Neon pour utiliser ws sur Node.js runtime
-neonConfig.webSocketConstructor = ws;
+neonConfig.webSocketConstructor = WebSocket;
 
 // Client Neon côté serveur uniquement (initialisation lazy)
 let sql: ReturnType<typeof neon> | null = null;
