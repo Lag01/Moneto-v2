@@ -10,13 +10,17 @@ import { neon, neonConfig } from '@neondatabase/serverless';
 import type { NeonProxyRequest, NeonProxyResponse } from '@/app/api/neon-proxy/route';
 
 // Configure Neon pour Node.js runtime (serveur uniquement)
+// ⚠️ IMPORTANT : La configuration doit être synchrone, AVANT toute utilisation du client
 if (typeof window === 'undefined') {
-  // Dynamic import de ws pour éviter l'erreur côté client
-  import('ws').then((wsModule) => {
-    neonConfig.webSocketConstructor = wsModule.default;
-  }).catch(() => {
-    // Ignore l'erreur si ws n'est pas disponible (ne devrait pas arriver)
-  });
+  try {
+    // Import synchrone de ws pour Node.js uniquement
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ws = require('ws');
+    neonConfig.webSocketConstructor = ws;
+  } catch (error) {
+    // ws n'est pas disponible (ne devrait pas arriver sur le serveur)
+    console.error('[Neon Client] ws non disponible:', error);
+  }
 }
 
 export interface SyncError {

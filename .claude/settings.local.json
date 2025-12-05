@@ -68,7 +68,8 @@
       "mcp__neon__run_sql",
       "Bash(vercel --version:*)",
       "mcp__stack-auth__search_docs",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
