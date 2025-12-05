@@ -19,16 +19,25 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { neon, neonConfig } from '@neondatabase/serverless';
-import { WebSocket } from 'ws';
-
-// Configure Neon pour utiliser ws sur Node.js runtime
-neonConfig.webSocketConstructor = WebSocket;
 
 // Client Neon côté serveur uniquement (initialisation lazy)
 let sql: ReturnType<typeof neon> | null = null;
 
 function getSqlClient() {
   if (!sql) {
+    // ⚠️ IMPORTANT : Configurer neonConfig AVANT d'appeler neon()
+    // Doit être fait ici (pas au niveau module) à cause du bundling Next.js
+    if (!neonConfig.webSocketConstructor) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { WebSocket } = require('ws');
+        neonConfig.webSocketConstructor = WebSocket;
+      } catch (error) {
+        console.error('[Neon] Impossible de charger ws:', error);
+        throw new Error('ws package required for Neon on Node.js runtime');
+      }
+    }
+
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) {
       throw new Error('DATABASE_URL non définie');
