@@ -165,7 +165,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
         error: {
           code: 'DATABASE_ERROR',
           message: 'Erreur lors de l\'exécution de la requête',
-          details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+          details: error.message, // ⚠️ TEMPORAIRE : afficher détails en prod pour debug
         },
       },
       { status: 500 }
