@@ -166,24 +166,39 @@ export async function uploadPlanToCloud(
 export async function downloadPlansFromCloud(
   userId: string
 ): Promise<DownloadResult> {
+  console.log('[Neon] downloadPlansFromCloud userId:', userId);
+
   try {
     const query = `SELECT * FROM public.monthly_plans
                    WHERE user_id = $1 ORDER BY created_at DESC`;
     const result = await executeQuery(query, [userId]);
 
+    console.log('[Neon] executeQuery result:', {
+      success: result.success,
+      dataLength: result.data?.length ?? 0,
+      error: result.error,
+    });
+
     if (!result.success) {
+      const errorMsg =
+        typeof result.error === 'string'
+          ? result.error
+          : result.error?.message || 'Erreur inconnue';
+      console.error('[Neon] Query failed:', errorMsg);
       return { success: false, error: result.error };
     }
 
     const plans = (result.data || []).map(rowToMonthlyPlan);
+    console.log('[Neon] Plans converted:', plans.length);
     return { success: true, plans };
   } catch (error) {
-    console.error('Erreur download:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[Neon] Exception:', msg, error);
     return {
       success: false,
       error: {
         code: 'UNKNOWN',
-        message: 'Erreur download',
+        message: msg,
         details: error,
       },
     };

@@ -7,6 +7,7 @@ import { useSafeSync } from '@/hooks/useSafeSync';
 import LocalDataMigrationModal from './LocalDataMigrationModal';
 import SyncChoiceModal from '@/components/sync/SyncChoiceModal';
 import { downloadPlansFromCloud } from '@/lib/neon/sync';
+import { notifySyncDebug } from '@/lib/toast-notifications';
 
 /**
  * AuthProvider - Initialise l'authentification au chargement de l'application
@@ -22,12 +23,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const setUser = useAppStore((state) => state.setUser);
   const user = useAppStore((state) => state.user);
   const monthlyPlans = useAppStore((state) => state.monthlyPlans);
+  const syncWithCloud = useAppStore((state) => state.syncWithCloud);
   const dataMigrationStatus = useAppStore((state) => state.dataMigrationStatus);
   const setDataMigrationStatus = useAppStore((state) => state.setDataMigrationStatus);
 
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [cloudPlansCount, setCloudPlansCount] = useState(0);
+  const [hasAttemptedAutoDownload, setHasAttemptedAutoDownload] = useState(false);
 
   // Hook de synchronisation sécurisée (attend la réhydratation complète)
   useSafeSync();
@@ -102,19 +105,64 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     // Compter les plans cloud à chaque login
     const fetchCloudPlansCount = async () => {
       try {
+        console.log('[AuthProvider] user.id:', user.id);
+        notifySyncDebug.fetchingCloudPlans();
+
         const result = await downloadPlansFromCloud(user.id);
-        if (result.success && result.plans) {
+
+        console.log('[AuthProvider] résultat:', {
+          success: result.success,
+          plansCount: result.plans?.length ?? 0,
+          error: result.error,
+        });
+
+        if (!result.success) {
+          const errorMsg =
+            typeof result.error === 'string'
+              ? result.error
+              : result.error?.message || 'Erreur inconnue';
+          notifySyncDebug.fetchError(errorMsg);
+          return;
+        }
+
+        if (result.plans && result.plans.length > 0) {
           setCloudPlansCount(result.plans.length);
-          // Afficher la modal à CHAQUE login
-          setShowSyncModal(true);
+          notifySyncDebug.cloudPlansFound(result.plans.length);
+
+          // 🎯 NOUVEAU : Auto-download si aucun plan local
+          const localPlansCount = useAppStore.getState().monthlyPlans.length;
+
+          if (localPlansCount === 0 && !hasAttemptedAutoDownload) {
+            console.log('[AuthProvider] Auto-download: 0 plans locaux, chargement auto');
+            setHasAttemptedAutoDownload(true);
+
+            // Charger directement sans modal
+            notifySyncDebug.syncStarting();
+            syncWithCloud()
+              .then(() => {
+                const count = useAppStore.getState().monthlyPlans.length;
+                notifySyncDebug.syncCompleted(count);
+              })
+              .catch((error) => {
+                const msg = error instanceof Error ? error.message : String(error);
+                notifySyncDebug.syncFailed(msg);
+              });
+          } else {
+            // Comportement normal : afficher la modal
+            setShowSyncModal(true);
+          }
+        } else {
+          notifySyncDebug.noCloudPlans();
         }
       } catch (error) {
-        console.error('[AuthProvider] Erreur lors du comptage des plans cloud:', error);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('[AuthProvider] exception:', msg, error);
+        notifySyncDebug.fetchError(msg);
       }
     };
 
     fetchCloudPlansCount();
-  }, [user]);
+  }, [user, hasAttemptedAutoDownload, syncWithCloud]);
 
   const handleCloseMigrationModal = () => {
     setShowMigrationModal(false);

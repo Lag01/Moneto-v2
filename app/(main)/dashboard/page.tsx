@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useEffect } from 'react';
+import { useUser } from '@stackframe/stack';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import { formatDate } from '@/lib/financial';
@@ -19,9 +20,12 @@ import TutorialWelcomeModal from '@/components/tutorial/TutorialWelcomeModal';
 import TutorialDisclaimerModal from '@/components/tutorial/TutorialDisclaimerModal';
 import LocalDataMigrationModal from '@/components/auth/LocalDataMigrationModal';
 import RenamePlanModal from '@/components/plans/RenamePlanModal';
+import { RefreshCw } from 'lucide-react';
+import { notifySyncDebug } from '@/lib/toast-notifications';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const stackUser = useUser();
   const {
     monthlyPlans,
     addMonthlyPlan,
@@ -33,6 +37,8 @@ export default function DashboardPage() {
     updateUserSettings,
     user,
     dataMigrationStatus,
+    syncWithCloud,
+    syncStatus,
   } = useAppStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -205,6 +211,22 @@ export default function DashboardPage() {
   const sortedPlans = [...monthlyPlans]
     .filter((plan) => !plan.isTutorial)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Afficher le bouton de rechargement si connecté, aucun plan, et (erreur OU jamais sync)
+  const showReloadButton =
+    stackUser && monthlyPlans.length === 0 && (syncStatus.error || !syncStatus.lastSyncAt);
+
+  const handleReloadPlans = async () => {
+    try {
+      notifySyncDebug.syncStarting();
+      await syncWithCloud();
+      const count = useAppStore.getState().monthlyPlans.length;
+      notifySyncDebug.syncCompleted(count);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      notifySyncDebug.syncFailed(msg);
+    }
+  };
 
   return (
     <LayoutWithNav>
@@ -596,6 +618,29 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* 🎯 Bouton de rechargement manuel */}
+      {showReloadButton && (
+        <div className="max-w-md mx-auto mt-8 p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+          <div className="flex items-start gap-4">
+            <RefreshCw className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                Aucun plan trouvé
+              </h3>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mb-4">
+                Si vous avez des plans dans le cloud, rechargez-les manuellement.
+              </p>
+              <button
+                onClick={handleReloadPlans}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Recharger les plans cloud
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de migration des données */}
       <LocalDataMigrationModal

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store';
+import { notifySyncDebug } from '@/lib/toast-notifications';
 
 /**
  * Hook pour déclencher la synchronisation UNIQUEMENT après réhydratation complète.
@@ -26,9 +27,22 @@ export function useSafeSync() {
     // 2. Store réhydraté depuis IndexedDB
     // 3. Pas encore synchronisé dans cette session
     if (user && _hasHydrated && !hasSyncedRef.current) {
-      console.log('[SafeSync] Déclenchement sync après réhydratation complète');
+      console.log('[SafeSync] Déclenchement sync');
       hasSyncedRef.current = true;
-      syncWithCloud();
+
+      notifySyncDebug.syncStarting();
+
+      syncWithCloud()
+        .then(() => {
+          const count = useAppStore.getState().monthlyPlans.length;
+          console.log('[SafeSync] Terminé, plans:', count);
+          notifySyncDebug.syncCompleted(count);
+        })
+        .catch((error) => {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error('[SafeSync] Erreur:', msg);
+          notifySyncDebug.syncFailed(msg);
+        });
     }
   }, [user, _hasHydrated, syncWithCloud]);
 }

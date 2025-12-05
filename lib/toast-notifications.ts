@@ -55,3 +55,42 @@ export const toastNotifications = {
     );
   },
 };
+
+/**
+ * Notifications de diagnostic pour la synchronisation
+ * Utilisées pour tracer le flux de sync et identifier les problèmes sur mobile
+ */
+export const notifySyncDebug = {
+  fetchingCloudPlans: () =>
+    toast.loading('Vérification des plans cloud...', {
+      id: 'fetch-cloud',
+      duration: 3000,
+    }),
+
+  cloudPlansFound: (count: number) => {
+    toast.dismiss('fetch-cloud');
+    toast.success(`${count} plan(s) trouvé(s) dans le cloud`);
+  },
+
+  noCloudPlans: () => {
+    toast.dismiss('fetch-cloud');
+    toast('Aucun plan dans le cloud', { icon: 'ℹ️' });
+  },
+
+  fetchError: (error: string) => {
+    toast.dismiss('fetch-cloud');
+    toast.error(`Erreur: ${error}`, { duration: 5000 });
+  },
+
+  syncStarting: () => toast.loading('Synchronisation...', { id: 'sync' }),
+
+  syncCompleted: (count: number) => {
+    toast.dismiss('sync');
+    toast.success(`${count} plan(s) synchronisé(s)`);
+  },
+
+  syncFailed: (error: string) => {
+    toast.dismiss('sync');
+    toast.error(`Sync échouée: ${error}`, { duration: 5000 });
+  },
+};

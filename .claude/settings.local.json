@@ -66,7 +66,9 @@
       "mcp__stack-auth__get_docs_by_id",
       "Bash(timeout 5 grep:*)",
       "mcp__neon__run_sql",
-      "Bash(vercel --version:*)"
+      "Bash(vercel --version:*)",
+      "mcp__stack-auth__search_docs",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []
