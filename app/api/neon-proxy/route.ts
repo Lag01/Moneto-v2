@@ -18,33 +18,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { neon, neonConfig } from '@neondatabase/serverless';
+import { sql } from '@vercel/postgres';
 
-// Client Neon côté serveur uniquement (initialisation lazy)
-let sql: ReturnType<typeof neon> | null = null;
-
-function getSqlClient() {
-  if (!sql) {
-    // ⚠️ IMPORTANT : Configurer neonConfig AVANT d'appeler neon()
-    // Doit être fait ici (pas au niveau module) à cause du bundling Next.js
-    if (!neonConfig.webSocketConstructor) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { WebSocket } = require('ws');
-        neonConfig.webSocketConstructor = WebSocket;
-      } catch (error) {
-        console.error('[Neon] Impossible de charger ws:', error);
-        throw new Error('ws package required for Neon on Node.js runtime');
-      }
-    }
-
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
-      throw new Error('DATABASE_URL non définie');
-    }
-    sql = neon(databaseUrl);
+// Vérifier que DATABASE_URL est définie
+function checkDatabaseUrl() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL non définie');
   }
-  return sql;
 }
 
 // Force la route à être dynamique (pas de pre-rendering au build)
@@ -112,32 +92,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       console.warn('[Neon Proxy] ATTENTION : Requête sans filtre user_id détectée');
     }
 
-    // Exécuter la requête via Neon
-    // Note : Interpolation manuelle des paramètres (same as lib/neon/client.ts)
-    const sqlClient = getSqlClient();
+    // Vérifier que DATABASE_URL est définie
+    checkDatabaseUrl();
 
-    let interpolatedQuery = query;
-    processedParams.forEach((param, index) => {
-      const placeholder = `$${index + 1}`;
-      const value =
-        param === null
-          ? 'NULL'
-          : typeof param === 'string'
-            ? `'${param.replace(/'/g, "''")}'`
-            : typeof param === 'number' || typeof param === 'boolean'
-              ? String(param)
-              : `'${JSON.stringify(param).replace(/'/g, "''")}'`;
-      interpolatedQuery = interpolatedQuery.replace(
-        new RegExp(`\\${placeholder.replace('$', '\\$')}`, 'g'),
-        value
-      );
-    });
-
-    const result = await sqlClient(interpolatedQuery as any);
+    // Exécuter la requête via @vercel/postgres
+    // @vercel/postgres supporte nativement les paramètres ($1, $2, etc.)
+    const result = await sql.query(query, processedParams);
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: result.rows, // @vercel/postgres retourne { rows: [...], rowCount, ... }
     });
   } catch (error: any) {
     console.error('[Neon Proxy] Erreur:', error);
