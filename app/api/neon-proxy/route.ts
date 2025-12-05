@@ -26,6 +26,7 @@ let sql: ReturnType<typeof neon> | null = null;
 function getSqlClient() {
   if (!sql) {
     const databaseUrl = process.env.DATABASE_URL;
+    console.log('[getSqlClient] DATABASE_URL:', databaseUrl ? `définie (${databaseUrl.length} chars)` : 'UNDEFINED');
     if (!databaseUrl) {
       throw new Error('DATABASE_URL non définie');
     }
@@ -55,6 +56,10 @@ export interface NeonProxyResponse {
 
 export async function POST(request: NextRequest): Promise<NextResponse<NeonProxyResponse>> {
   try {
+    // 🔍 DEBUG : Vérifier les variables d'environnement
+    console.log('[Neon Proxy] DATABASE_URL existe:', !!process.env.DATABASE_URL);
+    console.log('[Neon Proxy] DATABASE_URL length:', process.env.DATABASE_URL?.length);
+
     // Import dynamique de stackServerApp (évite l'initialisation au build)
     const { stackServerApp } = await import('@/stack/server');
 
