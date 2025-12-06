@@ -54,6 +54,13 @@ export async function executeQuery<T = any>(
     const result = (await response.json()) as NeonProxyResponse;
 
     if (!result.success) {
+      // Log détaillé des erreurs pour diagnostic
+      console.error('[Neon Client] Erreur proxy:', {
+        code: result.error?.code,
+        message: result.error?.message,
+        details: result.error?.details,
+      });
+
       return {
         success: false,
         error: {

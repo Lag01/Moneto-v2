@@ -66,7 +66,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
     // Vérifier l'authentification Stack Auth
     const user = await stackServerApp.getUser();
 
+    // Log de diagnostic pour vérifier l'authentification
+    console.log('[Neon Proxy] User authentification:', {
+      hasUser: !!user,
+      userId: user?.id,
+    });
+
     if (!user) {
+      console.error('[Neon Proxy] ÉCHEC AUTH - STACK_SECRET_SERVER_KEY configurée ?');
       return NextResponse.json(
         {
           success: false,
