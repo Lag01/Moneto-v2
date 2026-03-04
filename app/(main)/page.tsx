@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import FeatureCard from '@/components/landing/FeatureCard';
 import StepCard from '@/components/landing/StepCard';
-import ModeCard from '@/components/landing/ModeCard';
 import DemoSankeyChart from '@/components/landing/DemoSankeyChart';
 
 export default function PresentationPage() {
@@ -42,26 +41,26 @@ export default function PresentationPage() {
                 100% Gratuit
               </span>
               <span className="px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm font-semibold">
-                Open-source
+                Synchronisation cloud
               </span>
               <span className="px-4 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-sm font-semibold">
-                Données privées
+                Données chiffrées
               </span>
             </div>
 
             {/* CTA principal */}
             <Link
-              href="/home"
+              href="/auth/signup"
               className="inline-flex items-center gap-3 px-8 md:px-12 py-4 md:py-5 bg-emerald-600 hover:bg-emerald-700 text-white text-lg md:text-xl font-bold rounded-xl shadow-xl hover:shadow-2xl transition-all transform hover:scale-105 active:scale-95"
             >
-              <span>Commencer gratuitement</span>
+              <span>Créer mon compte gratuit</span>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </Link>
 
             <p className="text-slate-500 dark:text-slate-400 mt-6 text-sm">
-              Aucune carte bancaire • Aucun engagement • Installation en 2 clics
+              Compte gratuit • Données chiffrées • Synchronisation automatique
             </p>
           </div>
         </div>
@@ -316,7 +315,7 @@ export default function PresentationPage() {
           {/* CTA après la démo */}
           <div className="text-center mt-12">
             <Link
-              href="/home"
+              href="/auth/signup"
               className="inline-flex items-center gap-3 px-8 md:px-10 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl shadow-xl hover:shadow-2xl transition-all transform hover:scale-105"
             >
               <span>Créer mon propre budget</span>
@@ -411,29 +410,23 @@ export default function PresentationPage() {
               <span className="text-3xl">💾</span>
               Données et sauvegarde
             </h3>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <FeatureCard
-                color="purple"
-                icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
-                title="Stockage local sécurisé"
-                description="Vos données restent sur votre appareil avec IndexedDB, aucun serveur externe requis en mode local."
-              />
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               <FeatureCard
                 color="blue"
                 icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>}
-                title="Synchronisation cloud gratuite"
-                description="Créez un compte gratuit pour synchroniser vos plans sur tous vos appareils automatiquement."
+                title="Synchronisation cloud automatique"
+                description="Vos plans sont automatiquement synchronisés sur tous vos appareils après chaque modification."
               />
               <FeatureCard
-                color="indigo"
-                icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>}
-                title="Export/Import JSON"
-                description="Exportez vos plans en JSON pour les sauvegarder ou les partager, puis réimportez-les facilement."
+                color="purple"
+                icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
+                title="Chiffrement AES-256"
+                description="Vos données financières sont chiffrées de bout en bout avec un algorithme de niveau bancaire."
               />
               <FeatureCard
                 color="emerald"
                 icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
-                title="Aucune perte de données"
+                title="Sauvegarde automatique"
                 description="Vos plans sont sauvegardés automatiquement à chaque modification, impossible de perdre vos données."
               />
             </div>
@@ -455,8 +448,8 @@ export default function PresentationPage() {
               <FeatureCard
                 color="orange"
                 icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>}
-                title="Stockage local performant"
-                description="Vos données sont stockées localement sur votre appareil avec IndexedDB pour un accès instantané."
+                title="Multi-appareils"
+                description="Accédez à vos plans depuis votre mobile, tablette ou ordinateur grâce à la synchronisation cloud."
               />
               <FeatureCard
                 color="indigo"
@@ -475,68 +468,53 @@ export default function PresentationPage() {
         </div>
       </section>
 
-      {/* Section : Choisissez votre mode de sauvegarde */}
+      {/* Section : Vos données sont protégées */}
       <section className="px-6 md:px-12 lg:px-24 py-16 md:py-24 bg-white dark:bg-slate-800">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-5xl font-bold text-slate-900 dark:text-slate-100 mb-6">
-              Choisissez votre mode de sauvegarde
+              Vos données sont protégées
             </h2>
             <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto">
-              Les deux modes sont 100% gratuits. C&apos;est vous qui décidez comment gérer vos données.
+              Un compte gratuit, une synchronisation automatique, et un chiffrement de niveau bancaire.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            <ModeCard
-              icon={<svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" /></svg>}
-              title="Mode local"
-              description="Vos données restent sur votre appareil"
-              bgColor="bg-purple-600 dark:bg-purple-700"
-              features={[
-                'Aucun compte requis',
-                'Données 100% privées sur votre appareil',
-                'Stockage local sécurisé (IndexedDB)',
-                'Export/Import manuel au format JSON',
-                'Confidentialité maximale',
-              ]}
-            />
-
-            <ModeCard
-              badge="RECOMMANDÉ"
-              icon={<svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>}
-              title="Mode cloud"
-              description="Synchronisation gratuite sur tous vos appareils"
-              bgColor="bg-blue-600 dark:bg-blue-700"
-              features={[
-                'Création de compte gratuite',
-                'Synchronisation automatique multi-appareils',
-                'Sauvegarde sécurisée dans le cloud',
-                'Accès depuis mobile, tablette, ordinateur',
-                'Aucun frais, jamais',
-              ]}
-            />
-          </div>
-
-          <div className="mt-12 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-6 md:p-8 border-l-4 border-emerald-500">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="bg-slate-50 dark:bg-slate-700 rounded-2xl p-8 text-center">
+              <div className="w-16 h-16 bg-blue-600 dark:bg-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                </svg>
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-emerald-900 dark:text-emerald-300 mb-2">
-                  Passez facilement d&apos;un mode à l&apos;autre
-                </h3>
-                <p className="text-emerald-800 dark:text-emerald-400 leading-relaxed">
-                  Vous pouvez commencer en mode local puis créer un compte plus tard pour synchroniser vos données.
-                  Lors de la création de votre compte, l&apos;application vous proposera d&apos;importer automatiquement vos plans locaux vers le cloud.
-                  Vous gardez toujours le contrôle de vos données.
-                </p>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">Synchronisation cloud</h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Vos plans sont automatiquement sauvegardés et accessibles depuis tous vos appareils.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-700 rounded-2xl p-8 text-center">
+              <div className="w-16 h-16 bg-purple-600 dark:bg-purple-700 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
               </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">Chiffrement AES-256</h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Vos données financières sont chiffrées avec un algorithme de niveau bancaire. Personne ne peut les lire.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-700 rounded-2xl p-8 text-center">
+              <div className="w-16 h-16 bg-emerald-600 dark:bg-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">Compte gratuit</h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Créez votre compte en quelques secondes. Toutes les fonctionnalités sont gratuites, sans limite de temps.
+              </p>
             </div>
           </div>
         </div>
@@ -560,8 +538,7 @@ export default function PresentationPage() {
                 Confidentialité
               </h3>
               <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-                Vos données vous appartiennent. En mode local, elles ne quittent jamais votre appareil.
-                En mode cloud, elles sont chiffrées et sécurisées.
+                Vos données vous appartiennent. Elles sont chiffrées avec AES-256 et stockées de manière sécurisée dans le cloud.
               </p>
             </div>
 
@@ -620,8 +597,7 @@ export default function PresentationPage() {
               </h3>
               <p className="text-yellow-800 dark:text-yellow-400 leading-relaxed">
                 L&apos;application est actuellement en phase de test et subit des mises à jour fréquentes.
-                Vos données locales peuvent être supprimées lors des mises à jour.
-                Nous vous recommandons d&apos;exporter régulièrement vos plans au format JSON pour les sauvegarder.
+                Vos données sont sauvegardées dans le cloud et ne seront pas perdues lors des mises à jour.
               </p>
             </div>
           </div>
@@ -639,17 +615,17 @@ export default function PresentationPage() {
           </p>
 
           <Link
-            href="/home"
+            href="/auth/signup"
             className="inline-flex items-center gap-3 px-10 md:px-14 py-5 md:py-6 bg-white text-emerald-600 text-xl md:text-2xl font-bold rounded-xl shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 active:scale-95 mb-6"
           >
-            <span>Commencer maintenant</span>
+            <span>Créer mon compte gratuit</span>
             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
           </Link>
 
           <p className="text-white/90 text-sm mb-12">
-            Aucune carte bancaire • Aucun engagement • Installation en 2 clics
+            Compte gratuit • Données chiffrées • Synchronisation automatique
           </p>
 
           {/* Footer */}

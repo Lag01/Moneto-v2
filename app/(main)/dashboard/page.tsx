@@ -1,27 +1,22 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useUser } from '@stackframe/stack';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import { formatDate } from '@/lib/financial';
 import { formatCurrency } from '@/lib/financial';
 import { getPlanSummary } from '@/lib/monthly-plan';
-import {
-  exportMonthlyPlanToJSON,
-  exportAllPlansToJSON,
-  importMonthlyPlanFromJSON,
-} from '@/lib/export-import';
 import { useTutorialContext } from '@/context/TutorialContext';
 import { useTutorial } from '@/hooks/useTutorial';
 import TutorialWelcomeModal from '@/components/tutorial/TutorialWelcomeModal';
 import TutorialDisclaimerModal from '@/components/tutorial/TutorialDisclaimerModal';
-import LocalDataMigrationModal from '@/components/auth/LocalDataMigrationModal';
 import RenamePlanModal from '@/components/plans/RenamePlanModal';
 import { RefreshCw } from 'lucide-react';
 import { notifySyncDebug } from '@/lib/toast-notifications';
+
+const MAX_PLANS = 25;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -32,21 +27,13 @@ export default function DashboardPage() {
     setCurrentMonth,
     deleteMonthlyPlan,
     updateMonthlyPlanName,
-    importMonthlyPlanFromData,
     userSettings,
     updateUserSettings,
-    user,
-    dataMigrationStatus,
     syncWithCloud,
     syncStatus,
   } = useAppStore();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [showBetaWarning, setShowBetaWarning] = useState(true);
-  const [showMigrationModal, setShowMigrationModal] = useState(false);
-  const [showMigrationBanner, setShowMigrationBanner] = useState(true);
   const [renamingPlanId, setRenamingPlanId] = useState<string | null>(null);
 
   // Tutoriel
@@ -73,30 +60,6 @@ export default function DashboardPage() {
     setShowBetaWarning(false);
   };
 
-  const handleDismissMigrationBanner = () => {
-    setShowMigrationBanner(false);
-  };
-
-  const handleOpenMigrationModal = () => {
-    setShowMigrationModal(true);
-  };
-
-  const handleCloseMigrationModal = () => {
-    setShowMigrationModal(false);
-  };
-
-  // Vérifier si on doit afficher le banner de migration
-  const shouldShowMigrationBanner =
-    showMigrationBanner &&
-    user &&
-    monthlyPlans.length > 0 &&
-    !dataMigrationStatus.hasBeenCompleted;
-
-  // Vérifier si on doit afficher le call-to-action pour se connecter
-  const shouldShowLoginCTA =
-    !user &&
-    monthlyPlans.length > 0;
-
   const handleAcceptTutorial = () => {
     initializeTutorial();
     startTutorial();
@@ -111,7 +74,13 @@ export default function DashboardPage() {
     startTutorialAfterDisclaimer();
   };
 
+  // Compteur et limite
+  const nonTutorialPlans = monthlyPlans.filter((p) => !p.isTutorial);
+  const planCount = nonTutorialPlans.length;
+  const isLimitReached = planCount >= MAX_PLANS;
+
   const handleCreateNew = () => {
+    if (isLimitReached) return;
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     addMonthlyPlan(month);
@@ -131,79 +100,6 @@ export default function DashboardPage() {
   const handleDeletePlan = (planId: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer ce plan ?')) {
       deleteMonthlyPlan(planId);
-    }
-  };
-
-  const handleExportPlan = (planId: string) => {
-    const plan = monthlyPlans.find((p) => p.id === planId);
-    if (plan) {
-      exportMonthlyPlanToJSON(plan);
-    }
-  };
-
-  const handleExportAll = () => {
-    if (monthlyPlans.length === 0) {
-      alert('Aucun plan à exporter');
-      return;
-    }
-    exportAllPlansToJSON(monthlyPlans);
-  };
-
-  const handleImportClick = () => {
-    setImportError(null);
-    setImportSuccess(null);
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setImportError(null);
-    setImportSuccess(null);
-
-    try {
-      const result = await importMonthlyPlanFromJSON(file);
-
-      if (result.success && result.plan) {
-        // Vérifier si un plan existe déjà avec le même nom
-        const existingPlan = monthlyPlans.find((p) => p.name === result.plan!.name);
-        if (existingPlan) {
-          const confirm = window.confirm(
-            `Un plan nommé "${result.plan.name}" existe déjà. Voulez-vous importer quand même ?`
-          );
-          if (!confirm) {
-            return;
-          }
-        }
-
-        // Importer le plan
-        const newPlanId = importMonthlyPlanFromData(result.plan);
-        setImportSuccess(`Plan "${result.plan.name}" importé avec succès !`);
-
-        // Réinitialiser l'input file
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-
-        // Rediriger après un court délai
-        setTimeout(() => {
-          setCurrentMonth(newPlanId);
-          router.push('/onboarding');
-        }, 1500);
-      } else {
-        setImportError(
-          `Erreurs d'import : ${result.errors.join(', ')}`
-        );
-      }
-    } catch (error) {
-      setImportError('Erreur inattendue lors de l\'import');
-      console.error('Import error:', error);
-    }
-
-    // Réinitialiser l'input file
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
   };
 
@@ -245,7 +141,12 @@ export default function DashboardPage() {
 
       <div className="p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">Dashboard</h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">Dashboard</h1>
+            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+              {planCount}/{MAX_PLANS} plans
+            </span>
+          </div>
           <p className="text-sm md:text-base text-slate-600 dark:text-slate-400 mb-6 md:mb-8">
             Gérez vos plans mensuels et consultez votre historique financier
           </p>
@@ -270,7 +171,7 @@ export default function DashboardPage() {
                     Application en phase de test
                   </h3>
                   <p className="text-xs md:text-sm text-red-700 dark:text-red-300 leading-relaxed">
-                    L&apos;application est pour le moment en phase de test et subit souvent des mises à jour. Il se peut alors que vos données soient supprimées la prochaine fois que vous vous connecterez. Nous vous conseillons alors d&apos;exporter vos données afin de les réimporter plus tard si besoin.
+                    L&apos;application est pour le moment en phase de test et subit souvent des mises à jour. Il se peut alors que vos données soient supprimées la prochaine fois que vous vous connecterez.
                   </p>
                 </div>
                 <button
@@ -296,140 +197,16 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Bandeau de migration des données */}
-          {shouldShowMigrationBanner && (
-            <div className="mb-4 md:mb-6 bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-500 p-4 md:p-5 rounded-r-lg">
-              <div className="flex items-start gap-3">
-                <svg
-                  className="h-6 w-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                  />
-                </svg>
-                <div className="flex-1">
-                  <h3 className="text-sm md:text-base font-bold text-emerald-800 dark:text-emerald-300 mb-2">
-                    Synchronisez vos données avec le cloud
-                  </h3>
-                  <p className="text-xs md:text-sm text-emerald-700 dark:text-emerald-300 leading-relaxed mb-3">
-                    Vous avez {monthlyPlans.length} {monthlyPlans.length > 1 ? 'plans' : 'plan'} sur cet appareil. Sauvegardez-les dans le cloud pour y accéder depuis tous vos appareils et ne jamais les perdre.
-                  </p>
-                  <button
-                    onClick={handleOpenMigrationModal}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    Synchroniser mes données
-                  </button>
-                </div>
-                <button
-                  onClick={handleDismissMigrationBanner}
-                  className="p-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg transition-colors flex-shrink-0"
-                  aria-label="Fermer"
-                >
-                  <svg
-                    className="w-5 h-5 text-emerald-600 dark:text-emerald-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Call-to-action pour se connecter (utilisateurs non connectés avec plans locaux) */}
-          {shouldShowLoginCTA && (
-            <div className="mb-4 md:mb-6 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-4 md:p-5 rounded-r-lg">
-              <div className="flex items-start gap-3">
-                <svg
-                  className="h-6 w-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                  />
-                </svg>
-                <div className="flex-1">
-                  <h3 className="text-sm md:text-base font-bold text-blue-800 dark:text-blue-300 mb-2">
-                    Sauvegardez vos données dans le cloud
-                  </h3>
-                  <p className="text-xs md:text-sm text-blue-700 dark:text-blue-300 leading-relaxed mb-3">
-                    Vous avez {monthlyPlans.length} {monthlyPlans.length > 1 ? 'plans' : 'plan'} sur cet appareil.
-                    Créez un compte pour sauvegarder vos données dans le cloud et y accéder depuis tous vos appareils.
-                  </p>
-                  <Link
-                    href="/auth/login"
-                    className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    Se connecter pour sauvegarder
-                  </Link>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Messages d'erreur/succès import */}
-          {importError && (
-            <div className="mb-4 md:mb-6 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-3 md:p-4 rounded-r-lg">
-              <div className="flex items-start md:items-center gap-2 md:gap-3">
-                <svg
-                  className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5 md:mt-0"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <p className="text-xs md:text-sm font-medium text-red-800 dark:text-red-300">{importError}</p>
-              </div>
-            </div>
-          )}
-
-          {importSuccess && (
-            <div className="mb-4 md:mb-6 bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-500 p-3 md:p-4 rounded-r-lg">
-              <div className="flex items-start md:items-center gap-2 md:gap-3">
-                <svg
-                  className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5 md:mt-0"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <p className="text-xs md:text-sm font-medium text-emerald-800 dark:text-emerald-300">{importSuccess}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Boutons d'action */}
+          {/* Bouton de création */}
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 md:gap-3 mb-6 md:mb-8">
             <button
               onClick={handleCreateNew}
-              className="px-4 md:px-6 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
+              disabled={isLimitReached}
+              className={`px-4 md:px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base ${
+                isLimitReached
+                  ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
+              }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -439,49 +216,8 @@ export default function DashboardPage() {
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              Créer un nouveau plan
+              {isLimitReached ? `Limite de ${MAX_PLANS} plans atteinte` : 'Créer un nouveau plan'}
             </button>
-
-            {monthlyPlans.length > 0 && (
-              <button
-                onClick={handleExportAll}
-                className="px-4 md:px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                  />
-                </svg>
-                <span className="hidden sm:inline">Exporter tous</span>
-                <span className="sm:hidden">Exporter</span>
-              </button>
-            )}
-
-            <button
-              onClick={handleImportClick}
-              className="px-4 md:px-6 py-3 bg-slate-600 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 min-h-[44px] text-sm md:text-base"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                />
-              </svg>
-              Importer
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-
           </div>
 
           {/* Liste des plans */}
@@ -598,12 +334,6 @@ export default function DashboardPage() {
                           Visualiser
                         </button>
                         <button
-                          onClick={() => handleExportPlan(plan.id)}
-                          className="px-3 md:px-4 py-2 md:py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors text-xs md:text-sm font-medium min-h-[44px] flex items-center justify-center"
-                        >
-                          Exporter
-                        </button>
-                        <button
                           onClick={() => handleDeletePlan(plan.id)}
                           className="px-3 md:px-4 py-2 md:py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors text-xs md:text-sm font-medium min-h-[44px] flex items-center justify-center"
                         >
@@ -619,7 +349,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 🎯 Bouton de rechargement manuel */}
+      {/* Bouton de rechargement manuel */}
       {showReloadButton && (
         <div className="max-w-md mx-auto mt-8 p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800">
           <div className="flex items-start gap-4">
@@ -641,13 +371,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-
-      {/* Modal de migration des données */}
-      <LocalDataMigrationModal
-        isOpen={showMigrationModal}
-        localPlansCount={monthlyPlans.length}
-        onClose={handleCloseMigrationModal}
-      />
 
       {/* Modal de renommage */}
       {renamingPlanId && (

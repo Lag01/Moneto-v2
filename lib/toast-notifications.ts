@@ -42,18 +42,6 @@ export const toastNotifications = {
     });
   },
 
-  /**
-   * Plan créé mais sauvegarde cloud a échoué
-   */
-  planCreatedLocalOnly: (month: string) => {
-    toast(
-      `⚠️ Plan ${month} créé en local uniquement\n\nLa sauvegarde cloud a échoué. Vos données sont conservées localement.`,
-      {
-        duration: 6000,
-        icon: '⚠️',
-      }
-    );
-  },
 };
 
 /**

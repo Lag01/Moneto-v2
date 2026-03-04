@@ -5,11 +5,13 @@
  * - Vérifiant l'authentification Stack Auth côté serveur
  * - Utilisant une whitelist d'opérations autorisées (pas de SQL brut)
  * - Filtrant automatiquement par user_id
+ * - Chiffrant les données des plans (AES-256-GCM)
  * - Empêchant l'accès direct à Neon depuis le client
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import postgres from 'postgres';
+import crypto from 'crypto';
 
 // Singleton SQL client
 let sql: ReturnType<typeof postgres> | null = null;
@@ -35,9 +37,58 @@ function getSqlClient() {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+// --- Chiffrement AES-256-GCM ---
+
+const ENCRYPTION_PREFIX = 'v1:';
+
+function getEncryptionKey(): Buffer {
+  const key = process.env.PLAN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error('PLAN_ENCRYPTION_KEY non définie');
+  }
+  return Buffer.from(key, 'hex');
+}
+
+function encryptData(plaintext: string): string {
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag().toString('hex');
+
+  return `${ENCRYPTION_PREFIX}${iv.toString('hex')}:${authTag}:${encrypted}`;
+}
+
+function decryptData(ciphertext: string): string {
+  // Si les données ne sont pas chiffrées (legacy jsonb), les retourner telles quelles
+  if (!ciphertext.startsWith(ENCRYPTION_PREFIX)) {
+    // Données legacy non chiffrées — retourner en l'état
+    return ciphertext;
+  }
+
+  const key = getEncryptionKey();
+  const parts = ciphertext.slice(ENCRYPTION_PREFIX.length).split(':');
+  if (parts.length !== 3) {
+    throw new Error('Format de données chiffrées invalide');
+  }
+
+  const [ivHex, authTagHex, encryptedHex] = parts;
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+
+  return decrypted;
+}
+
 /**
  * Opérations autorisées via le proxy.
- * Chaque opération est une requête SQL pré-définie avec des paramètres typés.
  */
 type AllowedOperation =
   | 'SELECT_ALL_PLANS'
@@ -49,9 +100,6 @@ type AllowedOperation =
 export interface NeonProxyRequest {
   operation: AllowedOperation;
   params?: Record<string, any>;
-  // Champs legacy pour rétrocompatibilité temporaire
-  query?: string;
-  params_legacy?: any[];
 }
 
 export interface NeonProxyResponse {
@@ -65,8 +113,29 @@ export interface NeonProxyResponse {
 }
 
 /**
+ * Déchiffre le champ `data` de chaque row retournée par SELECT.
+ */
+function decryptRows(rows: any[]): any[] {
+  return rows.map((row) => {
+    if (row.data && typeof row.data === 'string') {
+      try {
+        const decrypted = decryptData(row.data);
+        row.data = JSON.parse(decrypted);
+      } catch {
+        // Si le déchiffrement échoue, tenter de parser en JSON directement (legacy)
+        try {
+          row.data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+        } catch {
+          // Laisser tel quel
+        }
+      }
+    }
+    return row;
+  });
+}
+
+/**
  * Exécute une opération whitelistée de manière sécurisée.
- * Le user_id est TOUJOURS injecté côté serveur, jamais depuis le client.
  */
 async function executeWhitelistedOperation(
   db: ReturnType<typeof postgres>,
@@ -75,39 +144,56 @@ async function executeWhitelistedOperation(
   params: Record<string, any> = {}
 ): Promise<any[]> {
   switch (operation) {
-    case 'SELECT_ALL_PLANS':
-      return db`
+    case 'SELECT_ALL_PLANS': {
+      const rows = await db`
         SELECT * FROM public.monthly_plans
         WHERE user_id = ${userId}
         ORDER BY created_at DESC
       `;
+      return decryptRows(Array.from(rows));
+    }
 
-    case 'SELECT_PLAN_BY_ID':
+    case 'SELECT_PLAN_BY_ID': {
       if (!params.plan_id) throw new Error('plan_id requis');
-      return db`
+      const rows = await db`
         SELECT * FROM public.monthly_plans
         WHERE user_id = ${userId} AND plan_id = ${params.plan_id}
         LIMIT 1
       `;
+      return decryptRows(Array.from(rows));
+    }
 
-    case 'INSERT_PLAN':
+    case 'INSERT_PLAN': {
       if (!params.plan_id || !params.data) throw new Error('plan_id et data requis');
+      // Vérifier la limite de 25 plans
+      const countResult = await db`
+        SELECT COUNT(*)::int AS count FROM public.monthly_plans WHERE user_id = ${userId}
+      `;
+      if (countResult[0]?.count >= 25) {
+        throw Object.assign(new Error('Limite atteinte : maximum 25 plans par utilisateur'), { code: 'PLAN_LIMIT_REACHED' });
+      }
+      // Chiffrer les données
+      const encryptedData = encryptData(typeof params.data === 'string' ? params.data : JSON.stringify(params.data));
       return db`
         INSERT INTO public.monthly_plans (user_id, plan_id, name, data, created_at, updated_at)
-        VALUES (${userId}, ${params.plan_id}, ${params.name || null}, ${params.data}, ${params.created_at || new Date().toISOString()}, ${params.updated_at || new Date().toISOString()})
+        VALUES (${userId}, ${params.plan_id}, ${params.name || null}, ${encryptedData}, ${params.created_at || new Date().toISOString()}, ${params.updated_at || new Date().toISOString()})
         RETURNING id
       `;
+    }
 
-    case 'UPDATE_PLAN':
+    case 'UPDATE_PLAN': {
       if (!params.plan_id) throw new Error('plan_id requis');
+      // Chiffrer les données
+      const encryptedData = encryptData(typeof params.data === 'string' ? params.data : JSON.stringify(params.data));
       return db`
         UPDATE public.monthly_plans
         SET name = ${params.name || null},
-            data = ${params.data},
+            data = ${encryptedData},
             updated_at = NOW()
         WHERE user_id = ${userId} AND plan_id = ${params.plan_id}
         RETURNING id
       `;
+    }
 
     case 'DELETE_PLAN':
       if (!params.plan_id) throw new Error('plan_id requis');
@@ -198,6 +284,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
     // Log uniquement en dev
     if (process.env.NODE_ENV === 'development') {
       console.error('[Neon Proxy] Erreur:', error);
+    }
+
+    if (error.code === 'PLAN_LIMIT_REACHED') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'PLAN_LIMIT_REACHED',
+            message: error.message,
+          },
+        },
+        { status: 429 }
+      );
     }
 
     if (error.message?.includes('permission denied')) {

@@ -14,10 +14,8 @@ export default function ProfilePage() {
   const user = useAppStore((state) => state.user);
   const syncStatus = useAppStore((state) => state.syncStatus);
   const monthlyPlans = useAppStore((state) => state.monthlyPlans);
-  const dataMigrationStatus = useAppStore((state) => state.dataMigrationStatus);
   const logout = useAppStore((state) => state.logout);
 
-  // Rediriger vers login si l'utilisateur n'est pas connecté
   useEffect(() => {
     if (!user) {
       router.push('/auth/login');
@@ -27,12 +25,12 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
       await logout();
-      router.push('/');
+      router.push('/auth/login');
     }
   };
 
   if (!user) {
-    return null; // Ou un loader
+    return null;
   }
 
   const getSyncStatusBadge = () => {
@@ -72,13 +70,12 @@ export default function ProfilePage() {
 
     return (
       <span className="inline-flex items-center gap-1 px-3 py-1 text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400 rounded-full">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
         Non synchronisé
       </span>
     );
   };
+
+  const nonTutorialPlans = monthlyPlans.filter((p) => !p.isTutorial);
 
   return (
     <LayoutWithNav>
@@ -105,11 +102,9 @@ export default function ProfilePage() {
                 <p className="text-lg font-medium text-slate-800 dark:text-slate-100">
                   {user.email}
                 </p>
-                {user.isPremium && (
-                  <span className="inline-block mt-1 px-3 py-1 text-sm font-medium bg-emerald-600 text-white rounded-full">
-                    Premium
-                  </span>
-                )}
+                <span className="inline-block mt-1 px-3 py-1 text-sm font-medium bg-emerald-600 text-white rounded-full">
+                  Premium
+                </span>
               </div>
             </div>
 
@@ -126,7 +121,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* 🎯 Paramètres du compte */}
+          {/* Paramètres du compte */}
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6 mb-6">
             <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Settings className="w-5 h-5" />
@@ -158,7 +153,6 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-4">
-              {/* Dernière synchronisation */}
               <div className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-slate-700">
                 <span className="text-sm text-slate-600 dark:text-slate-400">
                   Dernière synchronisation
@@ -170,29 +164,15 @@ export default function ProfilePage() {
                 </span>
               </div>
 
-              {/* Nombre de plans */}
               <div className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-slate-700">
                 <span className="text-sm text-slate-600 dark:text-slate-400">
-                  Plans sur cet appareil
+                  Mes plans
                 </span>
                 <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                  {monthlyPlans.length}
+                  {nonTutorialPlans.length}/25
                 </span>
               </div>
 
-              {/* Plans migrés */}
-              {dataMigrationStatus.hasBeenCompleted && (
-                <div className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-slate-700">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">
-                    Plans migrés vers le cloud
-                  </span>
-                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                    {dataMigrationStatus.migratedPlansCount}
-                  </span>
-                </div>
-              )}
-
-              {/* Erreur de sync */}
               {syncStatus.error && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                   <p className="text-sm text-red-800 dark:text-red-200 font-medium mb-1">
@@ -204,7 +184,6 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              {/* Indicateur de synchronisation */}
               <div className="pt-4">
                 <SyncIndicator />
               </div>

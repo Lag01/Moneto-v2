@@ -64,27 +64,27 @@ export interface CalculatedResults {
  */
 export interface MonthlyPlan {
   id: string;
-  name: string; // Nom personnalisé du plan (ex: "Budget Janvier 2025", "Vacances été", etc.)
+  name: string;
   fixedIncomes: FixedItem[];
   fixedExpenses: FixedItem[];
   envelopes: Envelope[];
   calculatedResults: CalculatedResults;
   createdAt: string;
   updatedAt: string;
-  isTutorial?: boolean; // Indique si c'est un plan d'exemple pour le tutoriel
+  isTutorial?: boolean;
 }
 
 /**
  * Paramètres globaux de l'utilisateur
  */
 export interface UserSettings {
-  firstDayOfMonth: number; // 1-28
-  currency: string; // EUR, USD, etc.
-  locale: string; // fr-FR, en-US, etc.
-  autoAdjustPercentages: boolean; // Ajuster auto à 100% ou erreur
-  theme: 'light' | 'dark' | 'system'; // Thème de l'application
-  hasSeenTutorial: boolean; // L'utilisateur a-t-il déjà vu le tutoriel ?
-  tutorialCompleted: boolean; // L'utilisateur a-t-il complété le tutoriel ?
+  firstDayOfMonth: number;
+  currency: string;
+  locale: string;
+  autoAdjustPercentages: boolean;
+  theme: 'light' | 'dark' | 'system';
+  hasSeenTutorial: boolean;
+  tutorialCompleted: boolean;
 }
 
 /**
@@ -96,16 +96,7 @@ export interface SyncStatus {
   error: string | null;
 }
 
-/**
- * État de migration des données locales vers le cloud
- */
-export interface DataMigrationStatus {
-  hasBeenProposed: boolean; // La migration a-t-elle été proposée à l'utilisateur ?
-  hasBeenCompleted: boolean; // La migration a-t-elle été effectuée ?
-  wasDeclined: boolean; // L'utilisateur a-t-il refusé la migration ?
-  lastProposedAt: Date | null; // Date de la dernière proposition
-  migratedPlansCount: number; // Nombre de plans migrés
-}
+const MAX_PLANS = 25;
 
 /**
  * État global de l'application
@@ -125,7 +116,7 @@ interface AppState {
   deleteCategory: (id: string) => void;
   getCategoriesByType: (type: 'income' | 'expense') => Category[];
 
-  // Plans mensuels
+  // Plans mensuels (cloud-only, pas de persistance locale)
   monthlyPlans: MonthlyPlan[];
   currentMonthId: string | null;
   addMonthlyPlan: (name: string) => string;
@@ -137,7 +128,6 @@ interface AppState {
   setCurrentMonth: (id: string | null) => void;
   recalculatePlan: (id: string) => void;
   normalizeEnvelopesForPlan: (id: string) => void;
-  importMonthlyPlanFromData: (planData: Partial<MonthlyPlan>) => string;
 
   // Paramètres utilisateur
   userSettings: UserSettings;
@@ -148,22 +138,17 @@ interface AppState {
   setUser: (user: User | null) => void;
   logout: () => Promise<void>;
 
-  // Synchronisation cloud
+  // Cloud
   syncStatus: SyncStatus;
-  syncWithCloud: () => Promise<void>;
-  downloadPlansFromCloud: () => Promise<void>;
   setSyncStatus: (status: Partial<SyncStatus>) => void;
-
-  // Migration des données locales
-  dataMigrationStatus: DataMigrationStatus;
-  setDataMigrationStatus: (status: Partial<DataMigrationStatus>) => void;
-  importLocalDataToCloud: () => Promise<{ success: boolean; migratedCount?: number; error?: string }>;
+  loadPlansFromCloud: () => Promise<void>;
+  syncWithCloud: (silent?: boolean) => Promise<void>;
 
   // Budget
   monthlyBudget: number;
   setMonthlyBudget: (budget: number) => void;
 
-  // Réhydratation
+  // Réhydratation (pour userSettings uniquement)
   _hasHydrated: boolean;
   _setHasHydrated: (value: boolean) => void;
 
@@ -197,14 +182,11 @@ const defaultUserSettings: UserSettings = {
 };
 
 /**
- * Configuration du stockage avec localforage
- * Utilise localStorage comme fallback côté serveur
+ * Configuration du stockage avec localforage (pour userSettings uniquement)
  */
 const customStorage = {
   getItem: async (name: string) => {
-    // Côté serveur, retourner null
     if (typeof window === 'undefined') return null;
-
     try {
       const value = await localforage.getItem<string>(name);
       return value || null;
@@ -214,9 +196,7 @@ const customStorage = {
     }
   },
   setItem: async (name: string, value: string) => {
-    // Côté serveur, ne rien faire
     if (typeof window === 'undefined') return;
-
     try {
       await localforage.setItem(name, value);
     } catch (error) {
@@ -224,9 +204,7 @@ const customStorage = {
     }
   },
   removeItem: async (name: string) => {
-    // Côté serveur, ne rien faire
     if (typeof window === 'undefined') return;
-
     try {
       await localforage.removeItem(name);
     } catch (error) {
@@ -236,7 +214,7 @@ const customStorage = {
 };
 
 /**
- * Store principal avec persistance
+ * Store principal — Plans en cloud, settings en local
  */
 export const useAppStore = create<AppState>()(
   persist(
@@ -253,13 +231,6 @@ export const useAppStore = create<AppState>()(
         isSyncing: false,
         lastSyncAt: null,
         error: null,
-      },
-      dataMigrationStatus: {
-        hasBeenProposed: false,
-        hasBeenCompleted: false,
-        wasDeclined: false,
-        lastProposedAt: null,
-        migratedPlansCount: 0,
       },
       _hasHydrated: false,
 
@@ -322,8 +293,19 @@ export const useAppStore = create<AppState>()(
         return get().categories.filter((c) => c.type === type);
       },
 
-      // Actions pour les plans mensuels
+      // Actions pour les plans mensuels (cloud-only)
       addMonthlyPlan: (name: string) => {
+        // Vérifier la limite
+        const currentPlans = get().monthlyPlans.filter((p) => !p.isTutorial);
+        if (currentPlans.length >= MAX_PLANS) {
+          if (typeof window !== 'undefined') {
+            import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+              toastNotifications.syncError(`Limite atteinte : maximum ${MAX_PLANS} plans`);
+            });
+          }
+          return '';
+        }
+
         const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
         const emptyResults: CalculatedResults = {
@@ -337,7 +319,7 @@ export const useAppStore = create<AppState>()(
 
         const newPlan: MonthlyPlan = {
           id: planId,
-          name, // Nom personnalisé fourni par l'utilisateur
+          name,
           fixedIncomes: [],
           fixedExpenses: [],
           envelopes: [],
@@ -346,37 +328,33 @@ export const useAppStore = create<AppState>()(
           updatedAt: new Date().toISOString(),
         };
 
-        // IMPORTANT : Créer le plan localement IMMÉDIATEMENT
+        // Créer le plan localement immédiatement
         set((state) => ({
           monthlyPlans: [...state.monthlyPlans, newPlan],
           currentMonthId: newPlan.id,
         }));
 
-        // Upload avec retry (asynchrone, non bloquant)
+        // Upload vers le cloud
         const user = get().user;
         if (user) {
           import('@/lib/neon/sync').then(({ uploadPlanToCloudWithRetry }) => {
             uploadPlanToCloudWithRetry(newPlan, user.id, 3, 1000)
               .then((result) => {
                 if (result.success) {
-                  // Toast de succès
                   if (typeof window !== 'undefined') {
                     import('@/lib/toast-notifications').then(({ toastNotifications }) => {
                       toastNotifications.planCreated(name);
                     });
                   }
                 } else {
-                  // Toast d'avertissement
                   if (typeof window !== 'undefined') {
                     import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-                      toastNotifications.planCreatedLocalOnly(name);
+                      toastNotifications.syncError('Erreur lors de la sauvegarde du plan');
                     });
                   }
                 }
               })
-              .catch(() => {
-                // Erreur inattendue, plan conservé localement
-              });
+              .catch(() => {});
           });
         }
 
@@ -387,25 +365,20 @@ export const useAppStore = create<AppState>()(
         const currentPlan = get().monthlyPlans.find((p) => p.id === id);
         if (!currentPlan) return;
 
-        // Mettre à jour le plan avec nouveau timestamp
         set((state) => ({
           monthlyPlans: state.monthlyPlans.map((p) =>
             p.id === id
-              ? {
-                  ...p,
-                  ...plan,
-                  updatedAt: new Date().toISOString()
-                }
+              ? { ...p, ...plan, updatedAt: new Date().toISOString() }
               : p
           ),
         }));
 
-        // Auto-sync avec debounce si utilisateur connecté
+        // Auto-sync silencieux avec debounce
         const user = get().user;
         if (user) {
           import('@/lib/neon/sync').then(({ debouncedSync }) => {
             debouncedSync(() => {
-              get().syncWithCloud();
+              get().syncWithCloud(true);
             });
           });
         }
@@ -415,31 +388,22 @@ export const useAppStore = create<AppState>()(
         const currentPlan = get().monthlyPlans.find((p) => p.id === id);
         if (!currentPlan) return;
 
-        // Vérifier que le nom est valide
-        if (!newName || newName.trim().length === 0) {
-          console.warn('[Store] Nom de plan invalide, opération annulée');
-          return;
-        }
+        if (!newName || newName.trim().length === 0) return;
 
-        // Mettre à jour uniquement le nom du plan
         set((state) => ({
           monthlyPlans: state.monthlyPlans.map((p) =>
             p.id === id
-              ? {
-                  ...p,
-                  name: newName.trim(),
-                  updatedAt: new Date().toISOString(),
-                }
+              ? { ...p, name: newName.trim(), updatedAt: new Date().toISOString() }
               : p
           ),
         }));
 
-        // Auto-sync avec debounce si utilisateur connecté
+        // Auto-sync silencieux avec debounce
         const user = get().user;
         if (user) {
           import('@/lib/neon/sync').then(({ debouncedSync }) => {
             debouncedSync(() => {
-              get().syncWithCloud();
+              get().syncWithCloud(true);
             });
           });
         }
@@ -451,7 +415,6 @@ export const useAppStore = create<AppState>()(
           currentMonthId: state.currentMonthId === id ? null : state.currentMonthId,
         }));
 
-        // Supprimer du cloud si utilisateur connecté
         const user = get().user;
         if (user) {
           import('@/lib/neon/sync').then(({ deletePlanFromCloud }) => {
@@ -470,10 +433,21 @@ export const useAppStore = create<AppState>()(
         const sourcePlan = get().monthlyPlans.find((p) => p.id === sourceId);
         if (!sourcePlan) return '';
 
+        // Vérifier la limite
+        const currentPlans = get().monthlyPlans.filter((p) => !p.isTutorial);
+        if (currentPlans.length >= MAX_PLANS) {
+          if (typeof window !== 'undefined') {
+            import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+              toastNotifications.syncError(`Limite atteinte : maximum ${MAX_PLANS} plans`);
+            });
+          }
+          return '';
+        }
+
         const newPlan: MonthlyPlan = {
           ...sourcePlan,
           id: `plan-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          name: newName || `${sourcePlan.name} (Copie)`, // Ajouter "(Copie)" si pas de nouveau nom
+          name: newName || `${sourcePlan.name} (Copie)`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -482,6 +456,14 @@ export const useAppStore = create<AppState>()(
           monthlyPlans: [...state.monthlyPlans, newPlan],
           currentMonthId: newPlan.id,
         }));
+
+        // Upload vers le cloud
+        const user = get().user;
+        if (user) {
+          import('@/lib/neon/sync').then(({ uploadPlanToCloudWithRetry }) => {
+            uploadPlanToCloudWithRetry(newPlan, user.id, 3, 1000).catch(() => {});
+          });
+        }
 
         return newPlan.id;
       },
@@ -495,19 +477,12 @@ export const useAppStore = create<AppState>()(
         const plan = get().monthlyPlans.find((p) => p.id === id);
         if (!plan) return;
 
-        // Import dynamique pour éviter les dépendances circulaires
         import('@/lib/plan-calculator').then(({ calculatePlanResults }) => {
           const calculatedResults = calculatePlanResults(plan);
 
           set((state) => ({
             monthlyPlans: state.monthlyPlans.map((p) =>
-              p.id === id
-                ? {
-                    ...p,
-                    calculatedResults,
-                    // NE PAS mettre à jour updatedAt : recalcul != modification
-                  }
-                : p
+              p.id === id ? { ...p, calculatedResults } : p
             ),
           }));
         });
@@ -518,10 +493,7 @@ export const useAppStore = create<AppState>()(
         if (!plan) return;
 
         const settings = get().userSettings;
-        if (!settings.autoAdjustPercentages) {
-          console.warn('Auto-ajustement des pourcentages désactivé');
-          return;
-        }
+        if (!settings.autoAdjustPercentages) return;
 
         import('@/lib/monthly-plan').then(({ normalizeEnvelopePercentages, recalculateEnvelopeAmounts, calculateAvailableAmount }) => {
           const normalizedEnvelopes = normalizeEnvelopePercentages(plan.envelopes);
@@ -530,95 +502,12 @@ export const useAppStore = create<AppState>()(
 
           set((state) => ({
             monthlyPlans: state.monthlyPlans.map((p) =>
-              p.id === id
-                ? {
-                    ...p,
-                    envelopes: updatedEnvelopes,
-                    // NE PAS mettre à jour updatedAt : normalisation auto != modification utilisateur
-                  }
-                : p
+              p.id === id ? { ...p, envelopes: updatedEnvelopes } : p
             ),
           }));
 
-          // Recalculer les résultats après normalisation
           get().recalculatePlan(id);
         });
-      },
-
-      importMonthlyPlanFromData: (planData: Partial<MonthlyPlan>) => {
-        const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        const now = new Date().toISOString();
-
-        // Générer de nouveaux IDs pour tous les items pour éviter les conflits
-        const fixedIncomes = (planData.fixedIncomes || []).map((item) => ({
-          ...item,
-          id: `income-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        }));
-
-        const fixedExpenses = (planData.fixedExpenses || []).map((item) => ({
-          ...item,
-          id: `expense-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        }));
-
-        const envelopes = (planData.envelopes || []).map((item) => ({
-          ...item,
-          id: `env-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        }));
-
-        const emptyResults: CalculatedResults = {
-          totalIncome: 0,
-          totalExpenses: 0,
-          availableAmount: 0,
-          totalEnvelopes: 0,
-          finalBalance: 0,
-          lastCalculated: now,
-        };
-
-        // Déterminer le nom du plan (rétrocompatibilité avec l'ancien champ month)
-        let planName: string;
-        if (planData.name) {
-          planName = planData.name;
-        } else if ((planData as any).month) {
-          // Conversion de l'ancien format month (YYYY-MM) vers name
-          try {
-            const monthDate = new Date((planData as any).month + '-01');
-            planName = monthDate.toLocaleDateString('fr-FR', {
-              month: 'long',
-              year: 'numeric',
-            });
-            planName = planName.charAt(0).toUpperCase() + planName.slice(1);
-          } catch {
-            planName = `Plan ${(planData as any).month}`;
-          }
-        } else {
-          // Nom par défaut basé sur la date actuelle
-          const defaultName = new Date().toLocaleDateString('fr-FR', {
-            month: 'long',
-            year: 'numeric',
-          });
-          planName = defaultName.charAt(0).toUpperCase() + defaultName.slice(1);
-        }
-
-        const newPlan: MonthlyPlan = {
-          id: planId,
-          name: planName,
-          fixedIncomes,
-          fixedExpenses,
-          envelopes,
-          calculatedResults: planData.calculatedResults || emptyResults,
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        set((state) => ({
-          monthlyPlans: [...state.monthlyPlans, newPlan],
-          currentMonthId: newPlan.id,
-        }));
-
-        // Recalculer les résultats après import
-        get().recalculatePlan(planId);
-
-        return planId;
       },
 
       // Paramètres utilisateur
@@ -628,14 +517,13 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      // Actions d'authentification
+      // Authentification
       setUser: (user: User | null) => {
         set({ user });
       },
 
       logout: async () => {
         try {
-          // Annuler tout timer de sync en attente pour éviter les race conditions
           const { cancelPendingSync } = await import('@/lib/neon/sync');
           cancelPendingSync();
 
@@ -643,36 +531,56 @@ export const useAppStore = create<AppState>()(
           const result = await signOut();
 
           if (result.success) {
-            set({ user: null });
+            set({ user: null, monthlyPlans: [], currentMonthId: null });
           }
         } catch (error) {
           console.error('Erreur lors de la déconnexion:', error);
         }
       },
 
-      // Actions de synchronisation
+      // Cloud
       setSyncStatus: (status: Partial<SyncStatus>) => {
         set((state) => ({
           syncStatus: { ...state.syncStatus, ...status },
         }));
       },
 
-      syncWithCloud: async () => {
+      loadPlansFromCloud: async () => {
         const state = get();
         const user = state.user;
-
         if (!user) return;
 
-        // Marquer comme en cours de synchronisation
         state.setSyncStatus({ isSyncing: true, error: null });
 
         try {
-          const { syncAllPlans } = await import('@/lib/neon/sync');
-
-          const result = await syncAllPlans(state.monthlyPlans, user.id);
+          const { downloadPlansFromCloud } = await import('@/lib/neon/sync');
+          const result = await downloadPlansFromCloud(user.id);
 
           if (result.success && result.plans) {
-            // Mettre à jour les plans avec les versions synchronisées
+            // Migration one-shot : si on a des plans locaux en IndexedDB, les uploader
+            const localPlans = state.monthlyPlans.filter((p) => !p.isTutorial);
+            if (localPlans.length > 0 && result.plans.length === 0) {
+              // L'utilisateur avait des plans locaux, pas de plans cloud → migration
+              const { uploadPlanToCloud } = await import('@/lib/neon/sync');
+              for (const plan of localPlans) {
+                await uploadPlanToCloud(plan, user.id);
+              }
+              // Les plans locaux deviennent les plans cloud
+              set({
+                syncStatus: {
+                  isSyncing: false,
+                  lastSyncAt: new Date().toISOString(),
+                  error: null,
+                },
+              });
+              if (typeof window !== 'undefined') {
+                import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                  toastNotifications.syncSuccess(localPlans.length);
+                });
+              }
+              return;
+            }
+
             set({
               monthlyPlans: result.plans,
               syncStatus: {
@@ -681,70 +589,6 @@ export const useAppStore = create<AppState>()(
                 error: null,
               },
             });
-
-            // Notification de succès
-            if (typeof window !== 'undefined') {
-              import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-                toastNotifications.syncSuccess(result.synced || 0);
-              });
-            }
-          } else {
-            const errorMessage = result.error?.message || 'Erreur inconnue';
-            state.setSyncStatus({
-              isSyncing: false,
-              error: errorMessage,
-            });
-
-            // Notification d'erreur
-            if (typeof window !== 'undefined') {
-              import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-                toastNotifications.syncError(errorMessage);
-              });
-            }
-          }
-        } catch (error) {
-          const errorMessage = 'Erreur lors de la synchronisation';
-          state.setSyncStatus({
-            isSyncing: false,
-            error: errorMessage,
-          });
-
-          // Notification d'erreur
-          if (typeof window !== 'undefined') {
-            import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-              toastNotifications.syncError(errorMessage);
-            });
-          }
-        }
-      },
-
-      downloadPlansFromCloud: async () => {
-        const state = get();
-        const user = state.user;
-
-        if (!user) return;
-
-        state.setSyncStatus({ isSyncing: true, error: null });
-
-        try {
-          const { downloadPlansFromCloud } = await import('@/lib/neon/sync');
-
-          const result = await downloadPlansFromCloud(user.id);
-
-          if (result.success && result.plans) {
-            // Fusionner les plans cloud avec les plans locaux
-            const localPlanIds = new Set(state.monthlyPlans.map((p) => p.id));
-            const cloudOnlyPlans = result.plans.filter((p) => !localPlanIds.has(p.id));
-
-            set((state) => ({
-              monthlyPlans: [...state.monthlyPlans, ...cloudOnlyPlans],
-              syncStatus: {
-                isSyncing: false,
-                lastSyncAt: new Date().toISOString(),
-                error: null,
-              },
-            }));
-
           } else {
             state.setSyncStatus({
               isSyncing: false,
@@ -754,90 +598,100 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           state.setSyncStatus({
             isSyncing: false,
-            error: 'Erreur lors du téléchargement',
+            error: 'Erreur lors du chargement des plans',
           });
         }
       },
 
-      // Actions de migration
-      setDataMigrationStatus: (status: Partial<DataMigrationStatus>) => {
-        set((state) => ({
-          dataMigrationStatus: { ...state.dataMigrationStatus, ...status },
-        }));
-      },
-
-      importLocalDataToCloud: async () => {
+      syncWithCloud: async (silent = false) => {
         const state = get();
         const user = state.user;
+        if (!user) return;
 
-        if (!user) {
-          return {
-            success: false,
-            error: 'Utilisateur non connecté',
-          };
-        }
-
-        const localPlans = state.monthlyPlans;
-        if (localPlans.length === 0) {
-          return {
-            success: true,
-            migratedCount: 0,
-          };
-        }
+        state.setSyncStatus({ isSyncing: true, error: null });
 
         try {
-          const { uploadPlanToCloud } = await import('@/lib/neon/sync');
+          const { syncAllPlans } = await import('@/lib/neon/sync');
+          const result = await syncAllPlans(state.monthlyPlans, user.id);
 
-          let migratedCount = 0;
-          const errors: string[] = [];
+          if (result.success && result.plans) {
+            // Merge intelligent
+            set((currentState) => {
+              const localPlansMap = new Map(
+                currentState.monthlyPlans.map((p) => [p.id, p])
+              );
 
-          // Upload chaque plan local vers le cloud
-          for (const plan of localPlans) {
-            try {
-              const result = await uploadPlanToCloud(plan, user.id);
-              if (result.success) {
-                migratedCount++;
-              } else {
-                errors.push(`Plan ${plan.name}: ${result.error}`);
+              const mergedPlans = result.plans!.map((cloudPlan) => {
+                const localPlan = localPlansMap.get(cloudPlan.id);
+                if (!localPlan) return cloudPlan;
+
+                const localHasData =
+                  localPlan.fixedIncomes.length > 0 ||
+                  localPlan.fixedExpenses.length > 0 ||
+                  localPlan.envelopes.length > 0;
+                const cloudHasData =
+                  cloudPlan.fixedIncomes.length > 0 ||
+                  cloudPlan.fixedExpenses.length > 0 ||
+                  cloudPlan.envelopes.length > 0;
+
+                if (localHasData && !cloudHasData) return localPlan;
+
+                const localTime = new Date(localPlan.updatedAt).getTime();
+                const cloudTime = new Date(cloudPlan.updatedAt).getTime();
+                if (localTime > cloudTime) return localPlan;
+
+                return cloudPlan;
+              });
+
+              for (const [id, localPlan] of localPlansMap) {
+                if (!result.plans!.find((p) => p.id === id)) {
+                  mergedPlans.push(localPlan);
+                }
               }
-            } catch (error) {
-              console.error(`Erreur lors de l'upload du plan ${plan.id}:`, error);
-              errors.push(`Plan ${plan.name}: erreur inattendue`);
+
+              return {
+                monthlyPlans: mergedPlans,
+                syncStatus: {
+                  isSyncing: false,
+                  lastSyncAt: new Date().toISOString(),
+                  error: null,
+                },
+              };
+            });
+
+            if (!silent && typeof window !== 'undefined') {
+              import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                toastNotifications.syncSuccess(result.synced || 0);
+              });
+            }
+          } else {
+            const errorMessage = result.error?.message || 'Erreur inconnue';
+            state.setSyncStatus({ isSyncing: false, error: errorMessage });
+
+            if (typeof window !== 'undefined') {
+              import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                toastNotifications.syncError(errorMessage);
+              });
             }
           }
-
-          // Mettre à jour le statut de migration
-          state.setDataMigrationStatus({
-            hasBeenCompleted: true,
-            migratedPlansCount: migratedCount,
-          });
-
-          if (errors.length > 0) {
-            return {
-              success: migratedCount > 0,
-              migratedCount,
-              error: `${migratedCount}/${localPlans.length} plans migrés. Erreurs: ${errors.join(', ')}`,
-            };
-          }
-
-          return {
-            success: true,
-            migratedCount,
-          };
         } catch (error) {
-          return {
-            success: false,
-            error: 'Erreur inattendue lors de la migration',
-          };
+          const errorMessage = 'Erreur lors de la synchronisation';
+          state.setSyncStatus({ isSyncing: false, error: errorMessage });
+
+          if (typeof window !== 'undefined') {
+            import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+              toastNotifications.syncError(errorMessage);
+            });
+          }
         }
       },
 
-      // Actions pour le budget
+      // Budget
       setMonthlyBudget: (budget) => {
         set({ monthlyBudget: budget });
       },
 
-      // Actions pour la réhydratation
+      // Réhydratation
       _setHasHydrated: (value) => {
         set({ _hasHydrated: value });
       },
@@ -856,93 +710,15 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: 'moneto-storage',
+      name: 'moneto-settings',
       storage: createJSONStorage(() => customStorage),
-      version: 3, // ⚠️ MIGRATION V3 : Suppression du champ month → ajout du champ name
-      migrate: (persistedState: any, version: number) => {
-        // Migration v2 → v3 : Supprimer month, ajouter name
-        if (version < 3) {
-          console.log('[Migration v3] Conversion month → name...');
-
-          if (persistedState.monthlyPlans && Array.isArray(persistedState.monthlyPlans)) {
-            persistedState.monthlyPlans = persistedState.monthlyPlans.map((plan: any) => {
-              // Si le plan a déjà un name, on le garde
-              if (plan.name) {
-                // Supprimer month même si name existe
-                delete plan.month;
-                return plan;
-              }
-
-              // Sinon, générer name depuis month si disponible
-              if (plan.month) {
-                try {
-                  const monthDate = new Date(plan.month + '-01');
-                  plan.name = monthDate.toLocaleDateString('fr-FR', {
-                    month: 'long',
-                    year: 'numeric',
-                  });
-                  // Capitaliser la première lettre (ex: "janvier" → "Janvier")
-                  plan.name = plan.name.charAt(0).toUpperCase() + plan.name.slice(1);
-                } catch {
-                  // Si la conversion échoue, utiliser un nom par défaut
-                  plan.name = `Plan ${plan.month || plan.id.substring(5, 13)}`;
-                }
-                // Supprimer le champ month
-                delete plan.month;
-              } else {
-                // Aucun month ni name : générer un nom par défaut
-                plan.name = `Plan ${plan.id.substring(5, 13)}`;
-              }
-
-              return plan;
-            });
-
-            console.log(`[Migration v3] ${persistedState.monthlyPlans.length} plans migrés`);
-          }
-        }
-
-        return persistedState;
-      },
+      // Ne persister QUE les settings, pas les plans
+      partialize: (state) => ({
+        userSettings: state.userSettings,
+        categories: state.categories,
+      }),
       onRehydrateStorage: () => (state) => {
-        // Callback appelé après la restauration depuis le stockage
         if (!state) return;
-
-        // Recalculer tous les plans après restauration
-        state.monthlyPlans.forEach((plan) => {
-          // Vérifier si le plan a besoin d'être migré (ancien format sans calculatedResults)
-          if (!plan.calculatedResults) {
-            const emptyResults: CalculatedResults = {
-              totalIncome: 0,
-              totalExpenses: 0,
-              availableAmount: 0,
-              totalEnvelopes: 0,
-              finalBalance: 0,
-              lastCalculated: new Date().toISOString(),
-            };
-            plan.calculatedResults = emptyResults;
-          }
-
-          // Migration : Ajouter le type 'percentage' aux enveloppes existantes sans type
-          plan.envelopes = plan.envelopes.map((env): Envelope => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const anyEnv = env as any;
-            if (!('type' in anyEnv)) {
-              return {
-                id: anyEnv.id,
-                name: anyEnv.name,
-                type: 'percentage' as const,
-                percentage: anyEnv.percentage,
-                amount: anyEnv.amount,
-              };
-            }
-            return env;
-          });
-
-          // Recalculer immédiatement les résultats
-          state.recalculatePlan(plan.id);
-        });
-
-        // Marquer la réhydratation comme terminée
         state._setHasHydrated(true);
       },
     }
