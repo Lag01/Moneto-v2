@@ -3,18 +3,9 @@
  *
  * Ce proxy sécurise toutes les requêtes vers Neon en :
  * - Vérifiant l'authentification Stack Auth côté serveur
- * - Filtrant automatiquement les requêtes par user_id
+ * - Utilisant une whitelist d'opérations autorisées (pas de SQL brut)
+ * - Filtrant automatiquement par user_id
  * - Empêchant l'accès direct à Neon depuis le client
- *
- * Usage depuis le client :
- *   const response = await fetch('/api/neon-proxy', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({
- *       query: 'SELECT * FROM monthly_plans WHERE user_id = $1',
- *       params: ['__USER_ID__'] // Sera automatiquement remplacé par l'ID réel
- *     })
- *   });
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,9 +21,10 @@ function getSqlClient() {
 
   if (!sql) {
     sql = postgres(process.env.DATABASE_URL, {
-      // Configuration pour Neon serverless
       ssl: 'require',
-      max: 1, // Limite de connexions pour serverless
+      max: 1,
+      connect_timeout: 15,
+      idle_timeout: 30,
     });
   }
 
@@ -43,9 +35,23 @@ function getSqlClient() {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/**
+ * Opérations autorisées via le proxy.
+ * Chaque opération est une requête SQL pré-définie avec des paramètres typés.
+ */
+type AllowedOperation =
+  | 'SELECT_ALL_PLANS'
+  | 'SELECT_PLAN_BY_ID'
+  | 'INSERT_PLAN'
+  | 'UPDATE_PLAN'
+  | 'DELETE_PLAN';
+
 export interface NeonProxyRequest {
-  query: string;
-  params?: any[];
+  operation: AllowedOperation;
+  params?: Record<string, any>;
+  // Champs legacy pour rétrocompatibilité temporaire
+  query?: string;
+  params_legacy?: any[];
 }
 
 export interface NeonProxyResponse {
@@ -58,6 +64,63 @@ export interface NeonProxyResponse {
   };
 }
 
+/**
+ * Exécute une opération whitelistée de manière sécurisée.
+ * Le user_id est TOUJOURS injecté côté serveur, jamais depuis le client.
+ */
+async function executeWhitelistedOperation(
+  db: ReturnType<typeof postgres>,
+  operation: AllowedOperation,
+  userId: string,
+  params: Record<string, any> = {}
+): Promise<any[]> {
+  switch (operation) {
+    case 'SELECT_ALL_PLANS':
+      return db`
+        SELECT * FROM public.monthly_plans
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+      `;
+
+    case 'SELECT_PLAN_BY_ID':
+      if (!params.plan_id) throw new Error('plan_id requis');
+      return db`
+        SELECT * FROM public.monthly_plans
+        WHERE user_id = ${userId} AND plan_id = ${params.plan_id}
+        LIMIT 1
+      `;
+
+    case 'INSERT_PLAN':
+      if (!params.plan_id || !params.data) throw new Error('plan_id et data requis');
+      return db`
+        INSERT INTO public.monthly_plans (user_id, plan_id, name, data, created_at, updated_at)
+        VALUES (${userId}, ${params.plan_id}, ${params.name || null}, ${params.data}, ${params.created_at || new Date().toISOString()}, ${params.updated_at || new Date().toISOString()})
+        RETURNING id
+      `;
+
+    case 'UPDATE_PLAN':
+      if (!params.plan_id) throw new Error('plan_id requis');
+      return db`
+        UPDATE public.monthly_plans
+        SET name = ${params.name || null},
+            data = ${params.data},
+            updated_at = NOW()
+        WHERE user_id = ${userId} AND plan_id = ${params.plan_id}
+        RETURNING id
+      `;
+
+    case 'DELETE_PLAN':
+      if (!params.plan_id) throw new Error('plan_id requis');
+      return db`
+        DELETE FROM public.monthly_plans
+        WHERE user_id = ${userId} AND plan_id = ${params.plan_id}
+      `;
+
+    default:
+      throw new Error(`Opération non autorisée: ${operation}`);
+  }
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse<NeonProxyResponse>> {
   try {
     // Import dynamique de stackServerApp (évite l'initialisation au build)
@@ -66,14 +129,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
     // Vérifier l'authentification Stack Auth
     const user = await stackServerApp.getUser();
 
-    // Log de diagnostic pour vérifier l'authentification
-    console.log('[Neon Proxy] User authentification:', {
-      hasUser: !!user,
-      userId: user?.id,
-    });
-
     if (!user) {
-      console.error('[Neon Proxy] ÉCHEC AUTH - STACK_SECRET_SERVER_KEY configurée ?');
       return NextResponse.json(
         {
           success: false,
@@ -88,53 +144,60 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
 
     // Parser la requête
     const body = (await request.json()) as NeonProxyRequest;
-    const { query, params = [] } = body;
 
-    if (!query) {
+    // Vérifier qu'une opération est spécifiée
+    if (!body.operation) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'INVALID_REQUEST',
-            message: 'Query manquante',
+            message: 'Opération manquante. Utilisez le champ "operation".',
           },
         },
         { status: 400 }
       );
     }
 
-    // Remplacer __USER_ID__ par l'ID réel de l'utilisateur
-    const processedParams = params.map((param) => (param === '__USER_ID__' ? user.id : param));
+    // Valider que l'opération est dans la whitelist
+    const allowedOps: AllowedOperation[] = [
+      'SELECT_ALL_PLANS',
+      'SELECT_PLAN_BY_ID',
+      'INSERT_PLAN',
+      'UPDATE_PLAN',
+      'DELETE_PLAN',
+    ];
 
-    // Vérifier que la requête contient bien un filtre user_id
-    if (!query.includes('user_id')) {
-      console.warn('[Neon Proxy] ATTENTION : Requête sans filtre user_id détectée');
-    }
-
-    // Exécuter la requête via postgres.js
-    const sql = getSqlClient();
-    const result = await sql.unsafe(query, processedParams);
-
-    return NextResponse.json({
-      success: true,
-      data: Array.isArray(result) ? result : [], // postgres.js retourne directement un array
-    });
-  } catch (error: any) {
-    console.error('[Neon Proxy] Erreur:', error);
-
-    // Détection d'erreurs spécifiques
-    if (error.message?.includes('syntax error')) {
+    if (!allowedOps.includes(body.operation)) {
       return NextResponse.json(
         {
           success: false,
           error: {
-            code: 'SQL_SYNTAX_ERROR',
-            message: 'Erreur de syntaxe SQL',
-            details: error.message,
+            code: 'FORBIDDEN',
+            message: `Opération "${body.operation}" non autorisée`,
           },
         },
-        { status: 400 }
+        { status: 403 }
       );
+    }
+
+    // Exécuter l'opération sécurisée (user_id injecté côté serveur)
+    const db = getSqlClient();
+    const result = await executeWhitelistedOperation(
+      db,
+      body.operation,
+      user.id,
+      body.params || {}
+    );
+
+    return NextResponse.json({
+      success: true,
+      data: Array.isArray(result) ? result : [],
+    });
+  } catch (error: any) {
+    // Log uniquement en dev
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[Neon Proxy] Erreur:', error);
     }
 
     if (error.message?.includes('permission denied')) {
@@ -144,14 +207,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
           error: {
             code: 'PERMISSION_DENIED',
             message: 'Permissions insuffisantes',
-            details: error.message,
           },
         },
         { status: 403 }
       );
     }
 
-    // Erreur générique
+    // Erreur générique (pas de détails en production)
     return NextResponse.json(
       {
         success: false,

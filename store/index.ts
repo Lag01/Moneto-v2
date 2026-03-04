@@ -147,7 +147,6 @@ interface AppState {
   user: User | null;
   setUser: (user: User | null) => void;
   logout: () => Promise<void>;
-  initializeAuth: () => Promise<void>;
 
   // Synchronisation cloud
   syncStatus: SyncStatus;
@@ -360,8 +359,6 @@ export const useAppStore = create<AppState>()(
             uploadPlanToCloudWithRetry(newPlan, user.id, 3, 1000)
               .then((result) => {
                 if (result.success) {
-                  console.log(`[Store] Plan "${name}" uploadé avec succès`);
-
                   // Toast de succès
                   if (typeof window !== 'undefined') {
                     import('@/lib/toast-notifications').then(({ toastNotifications }) => {
@@ -369,12 +366,6 @@ export const useAppStore = create<AppState>()(
                     });
                   }
                 } else {
-                  // Upload échoué MAIS plan reste local
-                  console.error(
-                    `[Store] Échec upload plan "${name}", conservé en local:`,
-                    result.error
-                  );
-
                   // Toast d'avertissement
                   if (typeof window !== 'undefined') {
                     import('@/lib/toast-notifications').then(({ toastNotifications }) => {
@@ -383,8 +374,8 @@ export const useAppStore = create<AppState>()(
                   }
                 }
               })
-              .catch((error) => {
-                console.error(`[Store] Erreur inattendue upload plan "${name}":`, error);
+              .catch(() => {
+                // Erreur inattendue, plan conservé localement
               });
           });
         }
@@ -442,8 +433,6 @@ export const useAppStore = create<AppState>()(
               : p
           ),
         }));
-
-        console.log(`[Store] Plan "${currentPlan.name}" renommé en "${newName.trim()}"`);
 
         // Auto-sync avec debounce si utilisateur connecté
         const user = get().user;
@@ -646,33 +635,18 @@ export const useAppStore = create<AppState>()(
 
       logout: async () => {
         try {
+          // Annuler tout timer de sync en attente pour éviter les race conditions
+          const { cancelPendingSync } = await import('@/lib/neon/sync');
+          cancelPendingSync();
+
           const { signOut } = await import('@/lib/auth-stack/auth');
           const result = await signOut();
 
           if (result.success) {
             set({ user: null });
-          } else {
-            console.error('Erreur lors de la déconnexion:', result.error);
           }
         } catch (error) {
           console.error('Erreur lors de la déconnexion:', error);
-        }
-      },
-
-      initializeAuth: async () => {
-        try {
-          const { getCurrentUser } = await import('@/lib/auth-stack/auth');
-
-          // Récupérer l'utilisateur actuel
-          const user = await getCurrentUser();
-          set({ user });
-
-          // Si un utilisateur est connecté, télécharger ses plans depuis le cloud
-          if (user) {
-            get().downloadPlansFromCloud();
-          }
-        } catch (error) {
-          console.error('Erreur lors de l\'initialisation de l\'authentification:', error);
         }
       },
 
@@ -687,10 +661,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const user = state.user;
 
-        if (!user) {
-          console.warn('Impossible de synchroniser : utilisateur non connecté');
-          return;
-        }
+        if (!user) return;
 
         // Marquer comme en cours de synchronisation
         state.setSyncStatus({ isSyncing: true, error: null });
@@ -710,8 +681,6 @@ export const useAppStore = create<AppState>()(
                 error: null,
               },
             });
-
-            console.log(`Synchronisation réussie : ${result.synced} plans synchronisés, ${result.conflicts} conflits résolus`);
 
             // Notification de succès
             if (typeof window !== 'undefined') {
@@ -734,7 +703,6 @@ export const useAppStore = create<AppState>()(
             }
           }
         } catch (error) {
-          console.error('Erreur lors de la synchronisation:', error);
           const errorMessage = 'Erreur lors de la synchronisation';
           state.setSyncStatus({
             isSyncing: false,
@@ -754,10 +722,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const user = state.user;
 
-        if (!user) {
-          console.warn('Impossible de télécharger : utilisateur non connecté');
-          return;
-        }
+        if (!user) return;
 
         state.setSyncStatus({ isSyncing: true, error: null });
 
@@ -780,10 +745,6 @@ export const useAppStore = create<AppState>()(
               },
             }));
 
-            console.log(`[Sync] Téléchargement réussi : ${cloudOnlyPlans.length} nouveaux plans depuis le cloud`);
-            if (cloudOnlyPlans.length > 0) {
-              console.log(`[Sync] Plans téléchargés :`, cloudOnlyPlans.map(p => p.name).join(', '));
-            }
           } else {
             state.setSyncStatus({
               isSyncing: false,
@@ -791,7 +752,6 @@ export const useAppStore = create<AppState>()(
             });
           }
         } catch (error) {
-          console.error('[Sync] Erreur lors du téléchargement des plans depuis Neon:', error);
           state.setSyncStatus({
             isSyncing: false,
             error: 'Erreur lors du téléchargement',
@@ -811,7 +771,6 @@ export const useAppStore = create<AppState>()(
         const user = state.user;
 
         if (!user) {
-          console.warn('Impossible de migrer : utilisateur non connecté');
           return {
             success: false,
             error: 'Utilisateur non connecté',
@@ -820,7 +779,6 @@ export const useAppStore = create<AppState>()(
 
         const localPlans = state.monthlyPlans;
         if (localPlans.length === 0) {
-          console.log('Aucun plan local à migrer');
           return {
             success: true,
             migratedCount: 0,
@@ -855,7 +813,6 @@ export const useAppStore = create<AppState>()(
           });
 
           if (errors.length > 0) {
-            console.warn('Erreurs lors de la migration:', errors);
             return {
               success: migratedCount > 0,
               migratedCount,
@@ -863,13 +820,11 @@ export const useAppStore = create<AppState>()(
             };
           }
 
-          console.log(`Migration réussie : ${migratedCount} plans migrés`);
           return {
             success: true,
             migratedCount,
           };
         } catch (error) {
-          console.error('Erreur inattendue lors de la migration:', error);
           return {
             success: false,
             error: 'Erreur inattendue lors de la migration',
@@ -952,8 +907,6 @@ export const useAppStore = create<AppState>()(
         // Callback appelé après la restauration depuis le stockage
         if (!state) return;
 
-        console.log('[Store] Réhydratation...', state.monthlyPlans.length, 'plans');
-
         // Recalculer tous les plans après restauration
         state.monthlyPlans.forEach((plan) => {
           // Vérifier si le plan a besoin d'être migré (ancien format sans calculatedResults)
@@ -991,8 +944,6 @@ export const useAppStore = create<AppState>()(
 
         // Marquer la réhydratation comme terminée
         state._setHasHydrated(true);
-
-        console.log('Store Moneto réhydraté avec succès');
       },
     }
   )

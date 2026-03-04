@@ -1,12 +1,9 @@
-import { executeQuery } from './client';
+import { executeOperation } from './client';
 import type { MonthlyPlan } from '@/store';
+import type { SyncError } from './types';
 import { monthlyPlanToRow, rowToMonthlyPlan } from './types';
 
-export interface SyncError {
-  code: 'NETWORK' | 'AUTH' | 'SERVER' | 'CONFLICT' | 'UNKNOWN';
-  message: string;
-  details?: unknown;
-}
+export type { SyncError } from './types';
 
 export interface SyncResult {
   success: boolean;
@@ -24,16 +21,18 @@ let syncTimeout: NodeJS.Timeout | null = null;
 const SYNC_DEBOUNCE_MS = 500;
 
 /**
+ * Annule tout timer de sync en attente.
+ * DOIT être appelé au logout pour éviter les race conditions entre sessions.
+ */
+export function cancelPendingSync(): void {
+  if (syncTimeout) {
+    clearTimeout(syncTimeout);
+    syncTimeout = null;
+  }
+}
+
+/**
  * Upload avec retry automatique (3 tentatives, backoff exponentiel).
- *
- * Cette fonction est utilisée lors de la création d'un nouveau plan pour garantir
- * que l'upload vers le cloud réussisse même en cas de problème réseau temporaire.
- *
- * @param plan - Le plan mensuel à uploader
- * @param userId - L'ID de l'utilisateur
- * @param maxRetries - Nombre maximum de tentatives (défaut: 3)
- * @param delayMs - Délai initial entre les tentatives en ms (défaut: 1000)
- * @returns Résultat de la synchronisation
  */
 export async function uploadPlanToCloudWithRetry(
   plan: MonthlyPlan,
@@ -48,29 +47,16 @@ export async function uploadPlanToCloudWithRetry(
       const result = await uploadPlanToCloud(plan, userId);
 
       if (result.success) {
-        if (attempt > 1) {
-          console.log(
-            `[Upload] Réussi après ${attempt} tentatives pour plan "${plan.name}"`
-          );
-        }
         return result;
       }
 
       lastError = result.error;
 
       if (attempt < maxRetries) {
-        console.warn(
-          `[Upload] Tentative ${attempt}/${maxRetries} échouée pour plan "${plan.name}", retry dans ${delayMs}ms`,
-          lastError
-        );
         await new Promise((resolve) => setTimeout(resolve, delayMs));
-        delayMs *= 2; // Exponential backoff
+        delayMs *= 2;
       }
     } catch (error) {
-      console.error(
-        `[Upload] Erreur inattendue tentative ${attempt} pour plan "${plan.name}":`,
-        error
-      );
       lastError = {
         code: 'UNKNOWN',
         message: 'Erreur inattendue',
@@ -84,10 +70,6 @@ export async function uploadPlanToCloudWithRetry(
     }
   }
 
-  // Toutes les tentatives ont échoué
-  console.error(
-    `[Upload] Échec définitif après ${maxRetries} tentatives pour plan "${plan.name}"`
-  );
   return {
     success: false,
     error: lastError,
@@ -102,11 +84,9 @@ export async function uploadPlanToCloud(
     const planRow = monthlyPlanToRow(plan, userId);
 
     // Vérifier si le plan existe
-    const checkQuery = `SELECT id FROM public.monthly_plans
-                        WHERE user_id = $1 AND plan_id = $2 LIMIT 1`;
-    const checkResult = await executeQuery<Array<{ id: string }>>(
-      checkQuery,
-      [userId, plan.id]
+    const checkResult = await executeOperation<Array<{ id: string }>>(
+      'SELECT_PLAN_BY_ID',
+      { plan_id: plan.id }
     );
 
     if (!checkResult.success) {
@@ -120,30 +100,23 @@ export async function uploadPlanToCloud(
 
     if (existing) {
       // Update
-      const updateQuery = `UPDATE public.monthly_plans
-                           SET name = $1, data = $2, updated_at = NOW()
-                           WHERE id = $3`;
-      const updateResult = await executeQuery(updateQuery, [
-        planRow.name,
-        JSON.stringify(planRow.data),
-        existing.id,
-      ]);
+      const updateResult = await executeOperation('UPDATE_PLAN', {
+        plan_id: plan.id,
+        name: planRow.name,
+        data: JSON.stringify(planRow.data),
+      });
       if (!updateResult.success) {
         return { success: false, error: updateResult.error };
       }
     } else {
       // Insert
-      const insertQuery = `INSERT INTO public.monthly_plans
-                           (user_id, plan_id, name, data, created_at, updated_at)
-                           VALUES ($1, $2, $3, $4, $5, $6)`;
-      const insertResult = await executeQuery(insertQuery, [
-        planRow.user_id,
-        planRow.plan_id,
-        planRow.name,
-        JSON.stringify(planRow.data),
-        planRow.created_at,
-        planRow.updated_at,
-      ]);
+      const insertResult = await executeOperation('INSERT_PLAN', {
+        plan_id: planRow.plan_id,
+        name: planRow.name,
+        data: JSON.stringify(planRow.data),
+        created_at: planRow.created_at,
+        updated_at: planRow.updated_at,
+      });
       if (!insertResult.success) {
         return { success: false, error: insertResult.error };
       }
@@ -151,7 +124,6 @@ export async function uploadPlanToCloud(
 
     return { success: true, synced: 1 };
   } catch (error) {
-    console.error('Erreur upload:', error);
     return {
       success: false,
       error: {
@@ -164,36 +136,19 @@ export async function uploadPlanToCloud(
 }
 
 export async function downloadPlansFromCloud(
-  userId: string
+  _userId: string
 ): Promise<DownloadResult> {
-  console.log('[Neon] downloadPlansFromCloud userId:', userId);
-
   try {
-    const query = `SELECT * FROM public.monthly_plans
-                   WHERE user_id = $1 ORDER BY created_at DESC`;
-    const result = await executeQuery(query, [userId]);
-
-    console.log('[Neon] executeQuery result:', {
-      success: result.success,
-      dataLength: result.data?.length ?? 0,
-      error: result.error,
-    });
+    const result = await executeOperation('SELECT_ALL_PLANS');
 
     if (!result.success) {
-      const errorMsg =
-        typeof result.error === 'string'
-          ? result.error
-          : result.error?.message || 'Erreur inconnue';
-      console.error('[Neon] Query failed:', errorMsg);
       return { success: false, error: result.error };
     }
 
     const plans = (result.data || []).map(rowToMonthlyPlan);
-    console.log('[Neon] Plans converted:', plans.length);
     return { success: true, plans };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error('[Neon] Exception:', msg, error);
     return {
       success: false,
       error: {
@@ -215,9 +170,9 @@ export async function syncPlan(
   conflict?: boolean;
 }> {
   try {
-    const query = `SELECT * FROM public.monthly_plans
-                   WHERE user_id = $1 AND plan_id = $2 LIMIT 1`;
-    const result = await executeQuery(query, [userId, localPlan.id]);
+    const result = await executeOperation('SELECT_PLAN_BY_ID', {
+      plan_id: localPlan.id,
+    });
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -241,8 +196,6 @@ export async function syncPlan(
 
     // Last-write-wins avec notification
     if (remoteUpdatedAt > localUpdatedAt) {
-      console.log(`Conflit : version distante plus récente`);
-
       // Notification de conflit (client-side uniquement)
       if (typeof window !== 'undefined') {
         import('@/lib/toast-notifications').then(({ toastNotifications }) => {
@@ -252,8 +205,6 @@ export async function syncPlan(
 
       return { success: true, plan: remotePlan, conflict: true };
     } else if (localUpdatedAt > remoteUpdatedAt) {
-      console.log(`Conflit : version locale plus récente`);
-
       // Notification de conflit (client-side uniquement)
       if (typeof window !== 'undefined') {
         import('@/lib/toast-notifications').then(({ toastNotifications }) => {
@@ -272,7 +223,6 @@ export async function syncPlan(
       return { success: true, plan: localPlan };
     }
   } catch (error) {
-    console.error('Erreur sync plan:', error);
     return {
       success: false,
       error: {
@@ -286,12 +236,12 @@ export async function syncPlan(
 
 export async function deletePlanFromCloud(
   planId: string,
-  userId: string
+  _userId: string
 ): Promise<SyncResult> {
   try {
-    const query = `DELETE FROM public.monthly_plans
-                   WHERE user_id = $1 AND plan_id = $2`;
-    const result = await executeQuery(query, [userId, planId]);
+    const result = await executeOperation('DELETE_PLAN', {
+      plan_id: planId,
+    });
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -299,7 +249,6 @@ export async function deletePlanFromCloud(
 
     return { success: true };
   } catch (error) {
-    console.error('Erreur delete:', error);
     return {
       success: false,
       error: {
@@ -322,23 +271,17 @@ export async function syncAllPlans(
   error?: SyncError;
 }> {
   try {
-    // ⚠️ IMPORTANT : Filtrer les plans tutoriels AVANT la synchronisation
-    // Les plans tutoriels ne doivent JAMAIS être uploadés vers le cloud
+    // Filtrer les plans tutoriels AVANT la synchronisation
     const plansToSync = localPlans.filter((plan) => !plan.isTutorial);
 
     if (plansToSync.length === 0) {
-      console.log('[Sync] Aucun plan à synchroniser (plans tutoriels exclus)');
       return {
         success: true,
-        plans: localPlans, // Retourner tous les plans locaux (y compris tutoriels)
+        plans: localPlans,
         synced: 0,
         conflicts: 0,
       };
     }
-
-    console.log(
-      `[Sync] Synchronisation de ${plansToSync.length} plans (${localPlans.length - plansToSync.length} tutoriels exclus)`
-    );
 
     // Map pour tracker les plans locaux non encore synchronisés
     const localPlansMap = new Map<string, MonthlyPlan>(
@@ -357,20 +300,18 @@ export async function syncAllPlans(
         batch.map((plan) => syncPlan(plan, userId))
       );
 
-      for (const result of results) {
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
         if (result.success && result.plan) {
           updatedPlans.push(result.plan);
-          localPlansMap.delete(result.plan.id); // Retirer du Map (déjà synchronisé)
+          localPlansMap.delete(result.plan.id);
           syncedCount++;
           if (result.conflict) conflictCount++;
         } else {
-          console.error(`Erreur sync plan:`, result.error);
-          // En cas d'erreur, garder la version locale
-          const failedPlan = batch.find((p) => p.id === result.plan?.id);
-          if (failedPlan) {
-            updatedPlans.push(failedPlan);
-            localPlansMap.delete(failedPlan.id); // Retirer du Map (déjà traité)
-          }
+          // En cas d'erreur, garder la version locale via l'index du batch
+          const failedPlan = batch[j];
+          updatedPlans.push(failedPlan);
+          localPlansMap.delete(failedPlan.id);
         }
       }
     }
@@ -378,10 +319,6 @@ export async function syncAllPlans(
     // Ajouter les plans locaux non encore uploadés
     const unsyncedLocalPlans = Array.from(localPlansMap.values());
     if (unsyncedLocalPlans.length > 0) {
-      console.log(
-        `[Sync] ${unsyncedLocalPlans.length} plans locaux non synchronisés conservés :`,
-        unsyncedLocalPlans.map((p) => p.name).join(', ')
-      );
       updatedPlans.push(...unsyncedLocalPlans);
     }
 
@@ -394,21 +331,13 @@ export async function syncAllPlans(
       );
 
       if (cloudOnlyPlans.length > 0) {
-        console.log(
-          `[Sync] ${cloudOnlyPlans.length} nouveaux plans depuis le cloud :`,
-          cloudOnlyPlans.map((p) => p.name).join(', ')
-        );
+        updatedPlans.push(...cloudOnlyPlans);
       }
-
-      updatedPlans.push(...cloudOnlyPlans);
     }
 
-    // ⚠️ IMPORTANT : Ajouter les plans tutoriels locaux (non synchronisés)
+    // Ajouter les plans tutoriels locaux (non synchronisés)
     const tutorialPlans = localPlans.filter((p) => p.isTutorial);
     if (tutorialPlans.length > 0) {
-      console.log(
-        `[Sync] ${tutorialPlans.length} plans tutoriels conservés localement`
-      );
       updatedPlans.push(...tutorialPlans);
     }
 
@@ -419,7 +348,6 @@ export async function syncAllPlans(
       conflicts: conflictCount,
     };
   } catch (error) {
-    console.error('Erreur sync globale:', error);
     return {
       success: false,
       error: {

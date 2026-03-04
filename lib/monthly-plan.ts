@@ -175,7 +175,7 @@ export function normalizeEnvelopePercentages(envelopes: Envelope[]): Envelope[] 
 
   // Si total = 0, répartir équitablement sur les enveloppes en %
   if (total === 0) {
-    const equalPercentage = 100 / percentage.length;
+    const equalPercentage = Math.round((100 / percentage.length) * 100) / 100;
     return envelopes.map((env) => {
       if (env.type === 'fixed') return env; // Garder les fixes intactes
       return {
@@ -186,12 +186,13 @@ export function normalizeEnvelopePercentages(envelopes: Envelope[]): Envelope[] 
   }
 
   // Ajuster proportionnellement seulement les enveloppes en %
+  // Arrondir à 2 décimales pour éviter les erreurs floating-point
   const factor = 100 / total;
   return envelopes.map((env) => {
     if (env.type === 'fixed') return env; // Garder les fixes intactes
     return {
       ...env,
-      percentage: env.percentage * factor,
+      percentage: Math.round(env.percentage * factor * 100) / 100,
     };
   });
 }

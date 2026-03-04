@@ -1,41 +1,35 @@
 /**
- * Client Neon avec proxy sécurisé
+ * Client Neon avec proxy sécurisé (opérations whitelistées)
  *
- * Ce module détecte automatiquement si le code s'exécute côté client ou serveur :
- * - Côté CLIENT (browser) : utilise le proxy API /api/neon-proxy (sécurisé par Stack Auth)
- * - Côté SERVEUR : utilise Neon directement (pour API Routes et scripts)
+ * Ce module communique avec le proxy API /api/neon-proxy
+ * en envoyant des opérations prédéfinies (pas de SQL brut).
  */
 
 import type { NeonProxyRequest, NeonProxyResponse } from '@/app/api/neon-proxy/route';
-
-export interface SyncError {
-  code: 'NETWORK' | 'AUTH' | 'SERVER' | 'CONFLICT' | 'UNKNOWN';
-  message: string;
-  details?: unknown;
-}
+import type { SyncError } from './types';
 
 const isClient = typeof window !== 'undefined';
+const FETCH_TIMEOUT_MS = 15_000; // 15 secondes
 
 export function isNeonConfigured(): boolean {
-  // Toujours utiliser le proxy API, même côté serveur
   return true;
 }
 
 /**
- * Exécute une requête SQL via le proxy sécurisé (client) ou directement (serveur)
+ * Exécute une opération whitelistée via le proxy sécurisé.
  *
- * @param query - Requête SQL avec placeholders $1, $2, etc.
- * @param params - Paramètres de la requête. Utiliser '__USER_ID__' pour user_id (remplacé automatiquement)
- * @returns Résultat de la requête ou erreur
+ * @param operation - Nom de l'opération (ex: 'SELECT_ALL_PLANS')
+ * @param params - Paramètres de l'opération
+ * @returns Résultat ou erreur
  */
-export async function executeQuery<T = any>(
-  query: string,
-  params: any[] = []
+export async function executeOperation<T = any>(
+  operation: NeonProxyRequest['operation'],
+  params: Record<string, any> = {}
 ): Promise<{ success: boolean; data?: T; error?: SyncError }> {
-  // --- Utiliser TOUJOURS le proxy API (client ET serveur) ---
-  // Cela simplifie l'architecture et évite les problèmes de bundling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
-    // Côté serveur, utiliser l'URL absolue
     const baseUrl = isClient ? '' : process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000';
@@ -46,21 +40,15 @@ export async function executeQuery<T = any>(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query,
+        operation,
         params,
       } as NeonProxyRequest),
+      signal: controller.signal,
     });
 
     const result = (await response.json()) as NeonProxyResponse;
 
     if (!result.success) {
-      // Log détaillé des erreurs pour diagnostic
-      console.error('[Neon Client] Erreur proxy:', {
-        code: result.error?.code,
-        message: result.error?.message,
-        details: result.error?.details,
-      });
-
       return {
         success: false,
         error: {
@@ -73,7 +61,16 @@ export async function executeQuery<T = any>(
 
     return { success: true, data: result.data as T };
   } catch (error) {
-    console.error('[Neon Client] Erreur proxy:', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK',
+          message: 'Requête expirée (timeout 15s)',
+        },
+      };
+    }
+
     return {
       success: false,
       error: {
@@ -82,5 +79,7 @@ export async function executeQuery<T = any>(
         details: error,
       },
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
