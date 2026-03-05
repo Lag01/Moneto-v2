@@ -34,7 +34,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Racine : rediriger les utilisateurs connectés vers le dashboard
-  if (pathname === '/') {
+  if (pathname === '/' || pathname === '/home') {
     if (hasSession) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
