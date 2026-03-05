@@ -21,15 +21,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Autoriser la racine exacte (landing page future)
-  if (pathname === '/' || pathname === '/home') {
-    return NextResponse.next();
-  }
-
   // Vérifier la présence du cookie de session Stack Auth
   const hasSession = request.cookies.getAll().some(
     (cookie) => cookie.name.startsWith('stack-token-')
   );
+
+  // Racine : rediriger les utilisateurs connectés vers le dashboard
+  if (pathname === '/' || pathname === '/home') {
+    if (hasSession) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return NextResponse.next();
+  }
 
   if (!hasSession) {
     const loginUrl = new URL('/auth/login', request.url);
