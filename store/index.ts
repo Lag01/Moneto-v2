@@ -418,7 +418,7 @@ export const useAppStore = create<AppState>()(
         const user = get().user;
         if (user) {
           import('@/lib/neon/sync').then(({ deletePlanFromCloud }) => {
-            deletePlanFromCloud(id, user.id).catch((error) => {
+            deletePlanFromCloud(id).catch((error) => {
               console.error('Erreur lors de la suppression du plan dans le cloud:', error);
             });
           });
@@ -532,6 +532,9 @@ export const useAppStore = create<AppState>()(
 
           if (result.success) {
             set({ user: null, monthlyPlans: [], currentMonthId: null });
+            if (typeof window !== 'undefined') {
+              window.location.href = '/';
+            }
           }
         } catch (error) {
           console.error('Erreur lors de la déconnexion:', error);
@@ -554,7 +557,7 @@ export const useAppStore = create<AppState>()(
 
         try {
           const { downloadPlansFromCloud } = await import('@/lib/neon/sync');
-          const result = await downloadPlansFromCloud(user.id);
+          const result = await downloadPlansFromCloud();
 
           if (result.success && result.plans) {
             // Migration one-shot : si on a des plans locaux en IndexedDB, les uploader

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = [
-  '/auth',
   '/api',
   '/_next',
   '/icons',
@@ -26,8 +25,16 @@ export function middleware(request: NextRequest) {
     (cookie) => cookie.name.startsWith('stack-token-')
   );
 
+  // Routes auth : rediriger les utilisateurs connectés vers le dashboard
+  if (pathname.startsWith('/auth')) {
+    if (hasSession) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return NextResponse.next();
+  }
+
   // Racine : rediriger les utilisateurs connectés vers le dashboard
-  if (pathname === '/' || pathname === '/home') {
+  if (pathname === '/') {
     if (hasSession) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }

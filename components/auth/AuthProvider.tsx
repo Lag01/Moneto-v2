@@ -32,7 +32,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (stackUser && !hasLoadedRef.current) {
       hasLoadedRef.current = true;
-      loadPlansFromCloud().catch(() => {});
+      loadPlansFromCloud().catch((error) => {
+        console.error('Erreur chargement plans:', error);
+        if (typeof window !== 'undefined') {
+          import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+            toastNotifications.syncError('Erreur lors du chargement de vos plans');
+          });
+        }
+      });
     }
 
     // Reset si l'utilisateur se déconnecte

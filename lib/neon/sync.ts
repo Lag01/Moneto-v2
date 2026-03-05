@@ -135,9 +135,7 @@ export async function uploadPlanToCloud(
   }
 }
 
-export async function downloadPlansFromCloud(
-  _userId: string
-): Promise<DownloadResult> {
+export async function downloadPlansFromCloud(): Promise<DownloadResult> {
   try {
     const result = await executeOperation('SELECT_ALL_PLANS');
 
@@ -235,8 +233,7 @@ export async function syncPlan(
 }
 
 export async function deletePlanFromCloud(
-  planId: string,
-  _userId: string
+  planId: string
 ): Promise<SyncResult> {
   try {
     const result = await executeOperation('DELETE_PLAN', {
@@ -323,7 +320,7 @@ export async function syncAllPlans(
     }
 
     // Télécharger les plans cloud uniquement
-    const downloadResult = await downloadPlansFromCloud(userId);
+    const downloadResult = await downloadPlansFromCloud();
     if (downloadResult.success && downloadResult.plans) {
       const localPlanIds = new Set(plansToSync.map((p) => p.id));
       const cloudOnlyPlans = downloadResult.plans.filter(

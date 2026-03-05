@@ -44,7 +44,14 @@ const ENCRYPTION_PREFIX = 'v1:';
 function getEncryptionKey(): Buffer {
   const key = process.env.PLAN_ENCRYPTION_KEY;
   if (!key) {
-    throw new Error('PLAN_ENCRYPTION_KEY non définie');
+    throw new Error(
+      'PLAN_ENCRYPTION_KEY non définie. Ajoutez une clé hex de 64 caractères dans les variables d\'environnement.'
+    );
+  }
+  if (key.length !== 64) {
+    throw new Error(
+      `PLAN_ENCRYPTION_KEY invalide (${key.length} chars, attendu: 64 hex chars pour AES-256).`
+    );
   }
   return Buffer.from(key, 'hex');
 }
