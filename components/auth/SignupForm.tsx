@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAppStore } from '@/store';
 
 export default function SignupForm() {
   const router = useRouter();
+  const setUser = useAppStore((state) => state.setUser);
+  const loadPlansFromCloud = useAppStore((state) => state.loadPlansFromCloud);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,6 +40,8 @@ export default function SignupForm() {
       const data = await res.json();
 
       if (data.success) {
+        setUser(data.user);
+        loadPlansFromCloud().catch(console.error);
         router.push('/dashboard');
       } else {
         setError(data.error || 'Erreur lors de la création du compte');
