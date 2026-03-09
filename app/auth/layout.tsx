@@ -1,7 +1,7 @@
 'use client';
-import { Suspense, useEffect } from 'react';
-import { useUser } from '@stackframe/stack';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { stackClientApp } from '@/stack/client';
 
 function AuthLoadingFallback() {
   return (
@@ -11,27 +11,23 @@ function AuthLoadingFallback() {
   );
 }
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const user = useUser();
+export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      router.replace('/dashboard');
-    }
-  }, [user, router]);
+    stackClientApp.getUser().then((user) => {
+      if (user) {
+        router.replace('/dashboard');
+      } else {
+        setReady(true);
+      }
+    });
+  }, [router]);
 
-  if (user) {
+  if (!ready) {
     return <AuthLoadingFallback />;
   }
 
   return <>{children}</>;
-}
-
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense fallback={<AuthLoadingFallback />}>
-      <AuthGuard>{children}</AuthGuard>
-    </Suspense>
-  );
 }
