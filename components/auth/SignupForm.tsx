@@ -1,28 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUser } from '@stackframe/stack';
 import { SignUp } from '@stackframe/stack';
 
 export default function SignupForm() {
-  const user = useUser();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (user) {
-      router.replace('/dashboard');
-    }
-  }, [user, router]);
-
-  if (user) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="stack-auth-wrapper">
       <SignUp />

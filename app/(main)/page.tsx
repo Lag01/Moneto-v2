@@ -1,23 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUser } from '@stackframe/stack';
 import Link from 'next/link';
 import FeatureCard from '@/components/landing/FeatureCard';
 import StepCard from '@/components/landing/StepCard';
 import DemoSankeyChart from '@/components/landing/DemoSankeyChart';
 
 export default function PresentationPage() {
-  const user = useUser();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (user) {
-      router.replace('/dashboard');
-    }
-  }, [user, router]);
-
   return (
     <main className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
       {/* Hero Section */}
