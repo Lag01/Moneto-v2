@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { StackProviders } from "@/components/auth/StackProviders";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/components/ToastProvider";
+import AuthProvider from "@/components/auth/AuthProvider";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -46,14 +46,14 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body className="antialiased">
-        <StackProviders>
-          <ThemeProvider>
+        <ThemeProvider>
+          <AuthProvider>
             <ToastProvider />
             {children}
             <Analytics />
             <SpeedInsights />
-          </ThemeProvider>
-        </StackProviders>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

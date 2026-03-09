@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import localforage from 'localforage';
-import type { User } from '@/lib/auth-stack/auth';
+import type { User } from '@/lib/auth/types';
 
 /**
  * Types pour les transactions
@@ -527,10 +527,10 @@ export const useAppStore = create<AppState>()(
           const { cancelPendingSync } = await import('@/lib/neon/sync');
           cancelPendingSync();
 
-          const { signOut } = await import('@/lib/auth-stack/auth');
-          const result = await signOut();
+          const res = await fetch('/api/auth/logout', { method: 'POST' });
+          const data = await res.json();
 
-          if (result.success) {
+          if (data.success) {
             set({ user: null, monthlyPlans: [], currentMonthId: null });
             if (typeof window !== 'undefined') {
               window.location.href = '/';

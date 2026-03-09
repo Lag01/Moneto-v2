@@ -1,13 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import SyncIndicator from '@/components/sync/SyncIndicator';
 import { formatDate } from '@/lib/financial';
-import { Settings } from 'lucide-react';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -118,28 +116,6 @@ export default function ProfilePage() {
                 </svg>
                 Se déconnecter
               </button>
-            </div>
-          </div>
-
-          {/* Paramètres du compte */}
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6 mb-6">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              Paramètres du compte
-            </h2>
-
-            <div className="space-y-4">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Gérez votre mot de passe, vos informations personnelles et vos préférences de sécurité.
-              </p>
-
-              <Link
-                href="/handler/account-settings"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-              >
-                <Settings className="w-4 h-4" />
-                Gérer mon compte
-              </Link>
             </div>
           </div>
 

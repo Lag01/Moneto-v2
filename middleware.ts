@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
+
+const SESSION_COOKIE = 'moneto-session';
 
 const PUBLIC_PATHS = [
   '/api',
@@ -9,10 +12,23 @@ const PUBLIC_PATHS = [
   '/favicon',
   '/sw.js',
   '/workbox-',
-  '/handler',
 ];
 
-export function middleware(request: NextRequest) {
+async function hasValidSession(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!token) return false;
+
+  try {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return false;
+    await jwtVerify(token, new TextEncoder().encode(secret));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Autoriser les routes publiques
@@ -20,14 +36,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Vérifier la présence du cookie de session Stack Auth
-  const hasSession = request.cookies.getAll().some(
-    (cookie) => cookie.name.startsWith('stack-token-')
-  );
+  const isAuthenticated = await hasValidSession(request);
 
   // Routes auth : rediriger les utilisateurs connectés vers le dashboard
   if (pathname.startsWith('/auth')) {
-    if (hasSession) {
+    if (isAuthenticated) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return NextResponse.next();
@@ -35,13 +48,14 @@ export function middleware(request: NextRequest) {
 
   // Racine : rediriger les utilisateurs connectés vers le dashboard
   if (pathname === '/' || pathname === '/home') {
-    if (hasSession) {
+    if (isAuthenticated) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return NextResponse.next();
   }
 
-  if (!hasSession) {
+  // Routes protégées : rediriger les non-connectés vers login
+  if (!isAuthenticated) {
     return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 

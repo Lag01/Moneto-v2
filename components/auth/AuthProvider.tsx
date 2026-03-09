@@ -1,52 +1,57 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useUser } from '@stackframe/stack';
 import { useAppStore } from '@/store';
 
 /**
- * AuthProvider - Initialise l'authentification et charge les plans depuis le cloud
+ * AuthProvider - Vérifie la session JWT et charge les plans depuis le cloud
  */
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const stackUser = useUser();
   const setUser = useAppStore((state) => state.setUser);
   const loadPlansFromCloud = useAppStore((state) => state.loadPlansFromCloud);
   const hasLoadedRef = useRef(false);
 
-  // Synchroniser Stack Auth user avec Zustand store
   useEffect(() => {
-    if (stackUser) {
-      const appUser = {
-        id: stackUser.id,
-        email: stackUser.primaryEmail || '',
-        isPremium: true,
-        isAuthenticated: true,
-      };
-      setUser(appUser);
-    } else {
-      setUser(null);
-    }
-  }, [stackUser, setUser]);
+    let cancelled = false;
 
-  // Charger les plans depuis le cloud au login (une seule fois)
-  useEffect(() => {
-    if (stackUser && !hasLoadedRef.current) {
-      hasLoadedRef.current = true;
-      loadPlansFromCloud().catch((error) => {
-        console.error('Erreur chargement plans:', error);
-        if (typeof window !== 'undefined') {
-          import('@/lib/toast-notifications').then(({ toastNotifications }) => {
-            toastNotifications.syncError('Erreur lors du chargement de vos plans');
-          });
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) {
+          setUser(null);
+          hasLoadedRef.current = false;
+          return;
         }
-      });
+
+        const data = await res.json();
+        if (data.success && data.user && !cancelled) {
+          setUser(data.user);
+
+          if (!hasLoadedRef.current) {
+            hasLoadedRef.current = true;
+            loadPlansFromCloud().catch((error) => {
+              console.error('Erreur chargement plans:', error);
+              if (typeof window !== 'undefined') {
+                import('@/lib/toast-notifications').then(({ toastNotifications }) => {
+                  toastNotifications.syncError('Erreur lors du chargement de vos plans');
+                });
+              }
+            });
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+        }
+      }
     }
 
-    // Reset si l'utilisateur se déconnecte
-    if (!stackUser) {
-      hasLoadedRef.current = false;
-    }
-  }, [stackUser, loadPlansFromCloud]);
+    checkSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setUser, loadPlansFromCloud]);
 
   return <>{children}</>;
 }

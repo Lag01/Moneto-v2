@@ -1,117 +1,116 @@
 'use client';
 
-import { SignUp } from '@stackframe/stack';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function SignupForm() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (password !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        router.push('/dashboard');
+      } else {
+        setError(data.error || 'Erreur lors de la création du compte');
+      }
+    } catch {
+      setError('Erreur de connexion au serveur');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="stack-auth-wrapper">
-      <SignUp />
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {error && (
+        <div className="p-3 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          {error}
+        </div>
+      )}
 
-      <style jsx global>{`
-        /* Personnalisation des composants Stack Auth pour design minimaliste */
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+          className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+          placeholder="vous@exemple.com"
+        />
+      </div>
 
-        /* Inputs */
-        .stack-auth-wrapper input[type='email'],
-        .stack-auth-wrapper input[type='password'],
-        .stack-auth-wrapper input[type='text'] {
-          width: 100%;
-          padding: 0.75rem 1rem;
-          border: 1px solid rgb(203 213 225);
-          border-radius: 0.5rem;
-          background-color: white;
-          color: rgb(15 23 42);
-          transition: all 0.2s;
-        }
+      <div>
+        <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+          Mot de passe
+        </label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+          className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+          placeholder="Minimum 8 caractères"
+        />
+      </div>
 
-        .dark .stack-auth-wrapper input[type='email'],
-        .dark .stack-auth-wrapper input[type='password'],
-        .dark .stack-auth-wrapper input[type='text'] {
-          border-color: rgb(71 85 105);
-          background-color: rgb(51 65 85);
-          color: rgb(248 250 252);
-        }
+      <div>
+        <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+          Confirmer le mot de passe
+        </label>
+        <input
+          id="confirmPassword"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+          className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+          placeholder="Confirmez votre mot de passe"
+        />
+      </div>
 
-        .stack-auth-wrapper input[type='email']:hover,
-        .stack-auth-wrapper input[type='password']:hover,
-        .stack-auth-wrapper input[type='text']:hover {
-          border-color: rgb(148 163 184);
-        }
-
-        .dark .stack-auth-wrapper input[type='email']:hover,
-        .dark .stack-auth-wrapper input[type='password']:hover,
-        .dark .stack-auth-wrapper input[type='text']:hover {
-          border-color: rgb(100 116 139);
-        }
-
-        .stack-auth-wrapper input:focus {
-          outline: none;
-          border-color: transparent;
-          box-shadow: 0 0 0 2px rgb(16 185 129);
-          transform: scale(1.01);
-        }
-
-        /* Button submit */
-        .stack-auth-wrapper button[type='submit'] {
-          width: 100%;
-          padding: 0.75rem 1.5rem;
-          background-color: rgb(16 185 129);
-          color: white;
-          border-radius: 0.5rem;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-
-        .stack-auth-wrapper button[type='submit']:hover {
-          background-color: rgb(5 150 105);
-          box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.2);
-        }
-
-        .stack-auth-wrapper button[type='submit']:active {
-          transform: scale(0.98);
-        }
-
-        /* Labels */
-        .stack-auth-wrapper label {
-          display: block;
-          font-size: 0.875rem;
-          font-weight: 500;
-          color: rgb(51 65 85);
-          margin-bottom: 0.5rem;
-        }
-
-        .dark .stack-auth-wrapper label {
-          color: rgb(203 213 225);
-        }
-
-        /* Messages d'erreur */
-        .stack-auth-wrapper .error-message {
-          font-size: 0.875rem;
-          color: rgb(239 68 68);
-          margin-top: 0.25rem;
-        }
-
-        .dark .stack-auth-wrapper .error-message {
-          color: rgb(248 113 113);
-        }
-
-        /* Liens */
-        .stack-auth-wrapper a {
-          color: rgb(16 185 129);
-          transition: color 0.2s;
-        }
-
-        .stack-auth-wrapper a:hover {
-          color: rgb(5 150 105);
-        }
-
-        .dark .stack-auth-wrapper a {
-          color: rgb(52 211 153);
-        }
-
-        .dark .stack-auth-wrapper a:hover {
-          color: rgb(16 185 129);
-        }
-      `}</style>
-    </div>
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full py-3 px-6 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 dark:disabled:bg-emerald-800 text-white font-medium rounded-lg transition-all active:scale-[0.98]"
+      >
+        {loading ? 'Création...' : 'Créer mon compte'}
+      </button>
+    </form>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { useUser } from '@stackframe/stack';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import { formatDate } from '@/lib/financial';
@@ -20,7 +19,6 @@ const MAX_PLANS = 25;
 
 export default function DashboardPage() {
   const router = useRouter();
-  const stackUser = useUser();
   const {
     monthlyPlans,
     addMonthlyPlan,
@@ -31,6 +29,7 @@ export default function DashboardPage() {
     updateUserSettings,
     syncWithCloud,
     syncStatus,
+    user,
   } = useAppStore();
 
   const [showBetaWarning, setShowBetaWarning] = useState(true);
@@ -110,7 +109,7 @@ export default function DashboardPage() {
 
   // Afficher le bouton de rechargement si connecté, aucun plan, et (erreur OU jamais sync)
   const showReloadButton =
-    stackUser && monthlyPlans.length === 0 && (syncStatus.error || !syncStatus.lastSyncAt);
+    user && monthlyPlans.length === 0 && (syncStatus.error || !syncStatus.lastSyncAt);
 
   const handleReloadPlans = async () => {
     try {

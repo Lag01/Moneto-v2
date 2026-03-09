@@ -1,8 +1,8 @@
 /**
- * API Route proxy pour Neon avec authentification Stack Auth
+ * API Route proxy pour Neon avec authentification JWT custom
  *
  * Ce proxy sécurise toutes les requêtes vers Neon en :
- * - Vérifiant l'authentification Stack Auth côté serveur
+ * - Vérifiant l'authentification JWT côté serveur
  * - Utilisant une whitelist d'opérations autorisées (pas de SQL brut)
  * - Filtrant automatiquement par user_id
  * - Chiffrant les données des plans (AES-256-GCM)
@@ -10,28 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import postgres from 'postgres';
 import crypto from 'crypto';
-
-// Singleton SQL client
-let sql: ReturnType<typeof postgres> | null = null;
-
-function getSqlClient() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL non définie');
-  }
-
-  if (!sql) {
-    sql = postgres(process.env.DATABASE_URL, {
-      ssl: 'require',
-      max: 1,
-      connect_timeout: 15,
-      idle_timeout: 30,
-    });
-  }
-
-  return sql;
-}
+import { getSqlClient } from '@/lib/neon/db';
+import { verifyJWT } from '@/lib/auth/jwt';
+import { SESSION_COOKIE } from '@/lib/auth/cookies';
 
 // Force la route à être dynamique (pas de pre-rendering au build)
 export const dynamic = 'force-dynamic';
@@ -71,7 +53,6 @@ function encryptData(plaintext: string): string {
 function decryptData(ciphertext: string): string {
   // Si les données ne sont pas chiffrées (legacy jsonb), les retourner telles quelles
   if (!ciphertext.startsWith(ENCRYPTION_PREFIX)) {
-    // Données legacy non chiffrées — retourner en l'état
     return ciphertext;
   }
 
@@ -129,7 +110,6 @@ function decryptRows(rows: any[]): any[] {
         const decrypted = decryptData(row.data);
         row.data = JSON.parse(decrypted);
       } catch {
-        // Si le déchiffrement échoue, tenter de parser en JSON directement (legacy)
         try {
           row.data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
         } catch {
@@ -145,7 +125,7 @@ function decryptRows(rows: any[]): any[] {
  * Exécute une opération whitelistée de manière sécurisée.
  */
 async function executeWhitelistedOperation(
-  db: ReturnType<typeof postgres>,
+  db: ReturnType<typeof import('postgres')>,
   operation: AllowedOperation,
   userId: string,
   params: Record<string, any> = {}
@@ -172,14 +152,12 @@ async function executeWhitelistedOperation(
 
     case 'INSERT_PLAN': {
       if (!params.plan_id || !params.data) throw new Error('plan_id et data requis');
-      // Vérifier la limite de 25 plans
       const countResult = await db`
         SELECT COUNT(*)::int AS count FROM public.monthly_plans WHERE user_id = ${userId}
       `;
       if (countResult[0]?.count >= 25) {
         throw Object.assign(new Error('Limite atteinte : maximum 25 plans par utilisateur'), { code: 'PLAN_LIMIT_REACHED' });
       }
-      // Chiffrer les données
       const encryptedData = encryptData(typeof params.data === 'string' ? params.data : JSON.stringify(params.data));
       return db`
         INSERT INTO public.monthly_plans (user_id, plan_id, name, data, created_at, updated_at)
@@ -190,7 +168,6 @@ async function executeWhitelistedOperation(
 
     case 'UPDATE_PLAN': {
       if (!params.plan_id) throw new Error('plan_id requis');
-      // Chiffrer les données
       const encryptedData = encryptData(typeof params.data === 'string' ? params.data : JSON.stringify(params.data));
       return db`
         UPDATE public.monthly_plans
@@ -216,13 +193,9 @@ async function executeWhitelistedOperation(
 
 export async function POST(request: NextRequest): Promise<NextResponse<NeonProxyResponse>> {
   try {
-    // Import dynamique de stackServerApp (évite l'initialisation au build)
-    const { stackServerApp } = await import('@/stack/server');
-
-    // Vérifier l'authentification Stack Auth
-    const user = await stackServerApp.getUser();
-
-    if (!user) {
+    // Vérifier l'authentification JWT
+    const token = request.cookies.get(SESSION_COOKIE)?.value;
+    if (!token) {
       return NextResponse.json(
         {
           success: false,
@@ -235,10 +208,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       );
     }
 
+    const payload = await verifyJWT(token);
+    if (!payload) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Session expirée ou invalide',
+          },
+        },
+        { status: 401 }
+      );
+    }
+
     // Parser la requête
     const body = (await request.json()) as NeonProxyRequest;
 
-    // Vérifier qu'une opération est spécifiée
     if (!body.operation) {
       return NextResponse.json(
         {
@@ -252,7 +238,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       );
     }
 
-    // Valider que l'opération est dans la whitelist
     const allowedOps: AllowedOperation[] = [
       'SELECT_ALL_PLANS',
       'SELECT_PLAN_BY_ID',
@@ -274,12 +259,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       );
     }
 
-    // Exécuter l'opération sécurisée (user_id injecté côté serveur)
     const db = getSqlClient();
     const result = await executeWhitelistedOperation(
       db,
       body.operation,
-      user.id,
+      payload.userId,
       body.params || {}
     );
 
@@ -288,7 +272,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       data: Array.isArray(result) ? result : [],
     });
   } catch (error: any) {
-    // Log uniquement en dev
     if (process.env.NODE_ENV === 'development') {
       console.error('[Neon Proxy] Erreur:', error);
     }
@@ -319,7 +302,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       );
     }
 
-    // Erreur générique (pas de détails en production)
     return NextResponse.json(
       {
         success: false,
