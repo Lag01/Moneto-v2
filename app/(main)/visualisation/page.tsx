@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
@@ -8,12 +9,16 @@ import { getPlanSummary } from '@/lib/monthly-plan';
 import { formatCurrency } from '@/lib/financial';
 import { useTutorialContext } from '@/context/TutorialContext';
 import { useTutorial } from '@/hooks/useTutorial';
+import { FileDown, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function VisualisationPage() {
   const router = useRouter();
   const { monthlyPlans, currentMonthId, setCurrentMonth } = useAppStore();
   const { isActive: isTutorialActive } = useTutorialContext();
   const { finishTutorial } = useTutorial();
+
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId);
 
@@ -179,6 +184,34 @@ export default function VisualisationPage() {
           {/* Graphique Sankey */}
           <div className="space-y-6 md:space-y-8">
             <SankeyChart plan={currentPlan} />
+          </div>
+
+          {/* Bouton PDF */}
+          <div className="flex justify-center mt-6 md:mt-8">
+            <button
+              onClick={async () => {
+                setIsGenerating(true);
+                try {
+                  const { generatePdfReport } = await import('@/lib/pdf/generate-report');
+                  await generatePdfReport(currentPlan);
+                  toast.success('Rapport PDF téléchargé');
+                } catch (error) {
+                  console.error('Erreur génération PDF:', error);
+                  toast.error('Erreur lors de la génération du PDF');
+                } finally {
+                  setIsGenerating(false);
+                }
+              }}
+              disabled={isGenerating}
+              className="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] text-sm md:text-base transition-colors"
+            >
+              {isGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileDown className="w-4 h-4" />
+              )}
+              {isGenerating ? 'Génération en cours...' : 'Télécharger le rapport PDF'}
+            </button>
           </div>
 
           {/* Actions */}
