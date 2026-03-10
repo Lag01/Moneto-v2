@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import EnvelopeAllocator from '@/components/EnvelopeAllocator';
@@ -9,9 +10,18 @@ import { useTutorialContext } from '@/context/TutorialContext';
 
 export default function RepartitionPage() {
   const router = useRouter();
-  const { monthlyPlans, currentMonthId, updateMonthlyPlan, normalizeEnvelopesForPlan, setCurrentMonth } =
+  const { monthlyPlans, currentMonthId, updateMonthlyPlan, normalizeEnvelopesForPlan, setCurrentMonth, resumeSync } =
     useAppStore();
   const { isActive: isTutorialActive, nextStep } = useTutorialContext();
+
+  // Filet de sécurité : si l'utilisateur quitte sans passer par "Suivant", on resume le sync
+  useEffect(() => {
+    return () => {
+      if (useAppStore.getState().syncPaused) {
+        useAppStore.getState().resumeSync();
+      }
+    };
+  }, []);
 
   const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId);
 
@@ -68,6 +78,9 @@ export default function RepartitionPage() {
       alert('Veuillez ajouter au moins une enveloppe');
       return;
     }
+
+    // Reprendre la sync cloud avant de quitter le flux
+    resumeSync();
 
     // Si le tutoriel est actif, faire progresser le tutoriel (qui fera la navigation automatiquement)
     if (isTutorialActive) {

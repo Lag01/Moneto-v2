@@ -140,7 +140,10 @@ interface AppState {
 
   // Cloud
   syncStatus: SyncStatus;
+  syncPaused: boolean;
   setSyncStatus: (status: Partial<SyncStatus>) => void;
+  pauseSync: () => void;
+  resumeSync: () => void;
   loadPlansFromCloud: () => Promise<void>;
   syncWithCloud: (silent?: boolean) => Promise<void>;
 
@@ -232,6 +235,7 @@ export const useAppStore = create<AppState>()(
         lastSyncAt: null,
         error: null,
       },
+      syncPaused: false,
       _hasHydrated: false,
 
       // Actions pour les transactions
@@ -334,9 +338,9 @@ export const useAppStore = create<AppState>()(
           currentMonthId: newPlan.id,
         }));
 
-        // Upload vers le cloud
+        // Upload vers le cloud (sauf si sync en pause)
         const user = get().user;
-        if (user) {
+        if (user && !get().syncPaused) {
           import('@/lib/neon/sync').then(({ uploadPlanToCloudWithRetry }) => {
             uploadPlanToCloudWithRetry(newPlan, user.id, 3, 1000)
               .then((result) => {
@@ -373,9 +377,9 @@ export const useAppStore = create<AppState>()(
           ),
         }));
 
-        // Auto-sync silencieux avec debounce
+        // Auto-sync silencieux avec debounce (sauf si sync en pause)
         const user = get().user;
-        if (user) {
+        if (user && !get().syncPaused) {
           import('@/lib/neon/sync').then(({ debouncedSync }) => {
             debouncedSync(() => {
               get().syncWithCloud(true);
@@ -546,6 +550,21 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           syncStatus: { ...state.syncStatus, ...status },
         }));
+      },
+
+      pauseSync: () => {
+        set({ syncPaused: true });
+        import('@/lib/neon/sync').then(({ cancelPendingSync }) => {
+          cancelPendingSync();
+        });
+      },
+
+      resumeSync: () => {
+        set({ syncPaused: false });
+        const user = get().user;
+        if (user) {
+          get().syncWithCloud(true);
+        }
       },
 
       loadPlansFromCloud: async () => {

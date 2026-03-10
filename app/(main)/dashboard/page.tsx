@@ -30,6 +30,7 @@ export default function DashboardPage() {
     syncWithCloud,
     syncStatus,
     user,
+    pauseSync,
   } = useAppStore();
 
   const [showBetaWarning, setShowBetaWarning] = useState(true);
@@ -80,6 +81,7 @@ export default function DashboardPage() {
 
   const handleCreateNew = () => {
     if (isLimitReached) return;
+    pauseSync();
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     addMonthlyPlan(month);
@@ -87,6 +89,7 @@ export default function DashboardPage() {
   };
 
   const handleSelectPlan = (planId: string) => {
+    pauseSync();
     setCurrentMonth(planId);
     router.push('/onboarding');
   };

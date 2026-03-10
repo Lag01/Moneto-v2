@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { useAppStore, type FixedItem } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import IncomeExpenseForm from '@/components/IncomeExpenseForm';
@@ -10,8 +11,17 @@ import { useTutorialContext } from '@/context/TutorialContext';
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { monthlyPlans, currentMonthId, updateMonthlyPlan, setCurrentMonth } = useAppStore();
+  const { monthlyPlans, currentMonthId, updateMonthlyPlan, setCurrentMonth, syncPaused, resumeSync } = useAppStore();
   const { isActive: isTutorialActive, nextStep } = useTutorialContext();
+
+  // Filet de sécurité : si l'utilisateur quitte sans passer par "Suivant", on resume le sync
+  useEffect(() => {
+    return () => {
+      if (useAppStore.getState().syncPaused) {
+        useAppStore.getState().resumeSync();
+      }
+    };
+  }, []);
 
   const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId);
 
