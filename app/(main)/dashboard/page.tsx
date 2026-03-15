@@ -31,6 +31,7 @@ export default function DashboardPage() {
     syncStatus,
     user,
     pauseSync,
+    _hasHydrated,
   } = useAppStore();
 
   const [showBetaWarning, setShowBetaWarning] = useState(true);
@@ -42,10 +43,10 @@ export default function DashboardPage() {
 
   // Afficher la modal de bienvenue si l'utilisateur n'a jamais vu le tutoriel et n'a aucun plan
   useEffect(() => {
-    if (!userSettings.hasSeenTutorial && monthlyPlans.length === 0) {
+    if (_hasHydrated && !user && !userSettings.hasSeenTutorial && monthlyPlans.length === 0) {
       setShowWelcomeModal(true);
     }
-  }, [userSettings.hasSeenTutorial, monthlyPlans.length, setShowWelcomeModal]);
+  }, [_hasHydrated, user, userSettings.hasSeenTutorial, monthlyPlans.length, setShowWelcomeModal]);
 
   // Vérifier si le bandeau de beta a été fermé
   useEffect(() => {

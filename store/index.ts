@@ -629,6 +629,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const user = state.user;
         if (!user) return;
+        if (state.syncStatus.isSyncing) return;
 
         state.setSyncStatus({ isSyncing: true, error: null });
 
