@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import localforage from 'localforage';
 import type { User } from '@/lib/auth/types';
+import { logger } from '@/lib/logger';
 
 /**
  * Types pour les transactions
@@ -194,7 +195,7 @@ const customStorage = {
       const value = await localforage.getItem<string>(name);
       return value || null;
     } catch (error) {
-      console.error('Erreur lors de la récupération depuis localforage:', error);
+      logger.error('Erreur lors de la récupération depuis localforage:', error);
       return null;
     }
   },
@@ -203,7 +204,7 @@ const customStorage = {
     try {
       await localforage.setItem(name, value);
     } catch (error) {
-      console.error('Erreur lors de la sauvegarde dans localforage:', error);
+      logger.error('Erreur lors de la sauvegarde dans localforage:', error);
     }
   },
   removeItem: async (name: string) => {
@@ -211,7 +212,7 @@ const customStorage = {
     try {
       await localforage.removeItem(name);
     } catch (error) {
-      console.error('Erreur lors de la suppression depuis localforage:', error);
+      logger.error('Erreur lors de la suppression depuis localforage:', error);
     }
   },
 };
@@ -423,7 +424,7 @@ export const useAppStore = create<AppState>()(
         if (user) {
           import('@/lib/neon/sync').then(({ deletePlanFromCloud }) => {
             deletePlanFromCloud(id).catch((error) => {
-              console.error('Erreur lors de la suppression du plan dans le cloud:', error);
+              logger.error('Erreur lors de la suppression du plan dans le cloud:', error);
             });
           });
         }
@@ -541,7 +542,7 @@ export const useAppStore = create<AppState>()(
             }
           }
         } catch (error) {
-          console.error('Erreur lors de la déconnexion:', error);
+          logger.error('Erreur lors de la déconnexion:', error);
         }
       },
 

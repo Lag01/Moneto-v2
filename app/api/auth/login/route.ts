@@ -3,12 +3,29 @@ import { getSqlClient } from '@/lib/neon/db';
 import { verifyPassword } from '@/lib/auth/password';
 import { signJWT } from '@/lib/auth/jwt';
 import { SESSION_COOKIE } from '@/lib/auth/cookies';
+import { checkRateLimit, getClientIp } from '@/lib/auth/rate-limiter';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+// Hash pré-calculé (bcrypt coût 12) pour timing constant quand l'email n'existe pas
+const DUMMY_HASH = '$2b$12$N7dMJLd.mw8nNpVrfgEax.H2TwnzwM2uTGe977R4tVtda/py5uYZy';
+
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting : 5 tentatives par 15 minutes
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`login:${ip}`, 5, 15 * 60 * 1000);
+    if (!rateLimit.allowed) {
+      const retryAfterSeconds = Math.ceil(rateLimit.retryAfterMs / 1000);
+      const response = NextResponse.json(
+        { success: false, error: 'Trop de tentatives. Réessayez plus tard.' },
+        { status: 429 }
+      );
+      response.headers.set('Retry-After', String(retryAfterSeconds));
+      return response;
+    }
+
     const { email, password } = await request.json();
 
     if (!email || !password) {
@@ -25,6 +42,8 @@ export async function POST(request: NextRequest) {
     `;
 
     if (result.length === 0) {
+      // Timing constant : toujours exécuter bcrypt.compare
+      await verifyPassword(password, DUMMY_HASH);
       return NextResponse.json(
         { success: false, error: 'Email ou mot de passe incorrect' },
         { status: 401 }
@@ -62,8 +81,10 @@ export async function POST(request: NextRequest) {
     });
 
     return response;
-  } catch (error: any) {
-    console.error('[Auth Login] Erreur:', error);
+  } catch (error: unknown) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[Auth Login] Erreur:', error);
+    }
     return NextResponse.json(
       { success: false, error: 'Erreur lors de la connexion' },
       { status: 500 }

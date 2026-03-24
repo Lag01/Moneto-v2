@@ -295,10 +295,60 @@ Optimisations :
 - [ ] Export PDF des rapports
 - [ ] Mode multi-comptes (partage de budget)
 
+## Architecture (Mermaid)
+
+```mermaid
+graph TB
+    subgraph Client["Client (Browser)"]
+        UI["Pages Next.js<br/>(dashboard, onboarding,<br/>repartition, visualisation)"]
+        Store["Zustand Store<br/>+ IndexedDB (localforage)"]
+        Auth["AuthProvider<br/>+ JWT Cookie"]
+        Tutorial["TutorialContext"]
+        PWA["Service Worker<br/>(next-pwa)"]
+    end
+
+    subgraph Server["API Routes (Next.js)"]
+        Middleware["middleware.ts<br/>JWT Verification<br/>+ Rate Limiting"]
+        LoginAPI["POST /api/auth/login<br/>bcrypt + JWT"]
+        SignupAPI["POST /api/auth/signup<br/>Validation + bcrypt"]
+        LogoutAPI["POST /api/auth/logout"]
+        MeAPI["GET /api/auth/me"]
+        NeonProxy["POST /api/neon-proxy<br/>Whitelist ops<br/>AES-256-GCM encrypt"]
+    end
+
+    subgraph Cloud["Cloud"]
+        Neon["Neon PostgreSQL<br/>(monthly_plans, users)"]
+    end
+
+    UI --> Store
+    UI --> Auth
+    UI --> Tutorial
+    Auth -->|JWT Cookie| Middleware
+    Middleware --> LoginAPI
+    Middleware --> SignupAPI
+    Middleware --> LogoutAPI
+    Middleware --> MeAPI
+    Middleware --> NeonProxy
+    NeonProxy -->|SSL + Parameterized SQL| Neon
+    Store -->|Sync| NeonProxy
+
+    classDef security fill:#fef3c7,stroke:#f59e0b
+    class Middleware,NeonProxy security
+```
+
+## Security Headers
+
+L'application configure les headers de securite suivants en production :
+- `X-Frame-Options: DENY` - Protection clickjacking
+- `X-Content-Type-Options: nosniff` - Prevention MIME sniffing
+- `Strict-Transport-Security` - Force HTTPS
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy` - Desactive camera, micro, geolocation
+
 ## 📄 License
 
 ISC
 
 ---
 
-**Développé avec ❤️ pour une gestion budgétaire simplifiée**
+**Developpe avec soin pour une gestion budgetaire simplifiee**

@@ -28,6 +28,16 @@ export default function SignupForm() {
       return;
     }
 
+    if (password.length > 128) {
+      setError('Le mot de passe ne doit pas dépasser 128 caractères');
+      return;
+    }
+
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -89,7 +99,7 @@ export default function SignupForm() {
           required
           autoComplete="new-password"
           className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-          placeholder="Minimum 8 caractères"
+          placeholder="Min. 8 car., 1 majuscule, 1 minuscule, 1 chiffre"
         />
       </div>
 
