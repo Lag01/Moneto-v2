@@ -16,7 +16,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     async function checkSession() {
       try {
-        const res = await fetch('/api/auth/me');
+        let res = await fetch('/api/auth/me');
+
+        // Si le token est expiré, tenter un refresh automatique
+        if (res.status === 401) {
+          const refreshRes = await fetch('/api/auth/refresh', { method: 'POST' });
+          if (refreshRes.ok) {
+            res = await fetch('/api/auth/me');
+          }
+        }
+
         if (!res.ok) {
           setUser(null);
           hasLoadedRef.current = false;

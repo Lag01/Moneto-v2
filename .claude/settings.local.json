@@ -69,11 +69,19 @@
       "Bash(vercel --version:*)",
       "mcp__stack-auth__search_docs",
       "Bash(wc:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "mcp__neon__describe_project",
+      "Bash(git log:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
   },
   "enableAllProjectMcpServers": true,
-  "spinnerTipsEnabled": false
+  "spinnerTipsEnabled": false,
+  "enabledMcpjsonServers": [
+    "vercel",
+    "supabase",
+    "stack-auth"
+  ]
 }

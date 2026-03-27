@@ -2,6 +2,7 @@
 
 import Navigation from '@/components/Navigation';
 import MobileNav from '@/components/MobileNav';
+import OfflineBanner from '@/components/OfflineBanner';
 import { useTutorialContext } from '@/context/TutorialContext';
 
 export default function LayoutWithNav({
@@ -18,6 +19,9 @@ export default function LayoutWithNav({
 
   return (
     <div className="min-h-screen">
+      {/* Bandeau hors-ligne */}
+      <OfflineBanner />
+
       {/* Navigation desktop (fixe, cachée sur mobile) */}
       <Navigation />
 

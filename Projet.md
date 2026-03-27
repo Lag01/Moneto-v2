@@ -33,10 +33,20 @@ Application web de gestion financière personnelle basée sur la méthode des en
 - Rate limiting en mémoire sur les routes auth (5 tentatives login / 3 signup par 15 min)
 - Protection timing attack sur login (bcrypt constant-time)
 - Protection contre l'énumération d'emails au signup
-- Security headers (X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy, Permissions-Policy)
+- Security headers (X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy, Permissions-Policy, **Content-Security-Policy**)
 - Validation email RFC 5322 simplifiée
 - Complexité mot de passe (majuscule + minuscule + chiffre, 8-128 caractères)
 - Logger conditionnel (logs dev-only, pas d'exposition en production)
+- **Limite de taille des requêtes** (1MB max sur neon-proxy)
+- **Refresh tokens** avec rotation automatique (access token 15min, refresh token 7 jours en DB)
+
+### UX Améliorations (V2.18 - mars 2026)
+- **Modals de confirmation** personnalisées (remplace les `confirm()` natifs)
+- **Error boundaries** (pages d'erreur gracieuses avec bouton "Réessayer")
+- **Indicateur hors-ligne** (bandeau persistant quand la connexion est coupée)
+- **Toast Undo** pour la suppression de plans (5s pour annuler)
+- **Clavier numérique** sur mobile pour tous les champs de montant (`inputMode="decimal"`)
+- `.env.example` fourni pour les nouveaux développeurs
 
 ### Tutoriel interactif
 - Modal de bienvenue
@@ -60,4 +70,4 @@ Application web de gestion financière personnelle basée sur la méthode des en
 
 ## Dernière mise à jour
 
-24 mars 2026 - Audit de sécurité complet + corrections
+27 mars 2026 - Quick wins UX/sécurité + système de refresh tokens

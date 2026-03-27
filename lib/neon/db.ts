@@ -10,7 +10,7 @@ export function getSqlClient() {
   if (!sql) {
     sql = postgres(process.env.DATABASE_URL, {
       ssl: 'require',
-      max: 1,
+      max: 5,
       connect_timeout: 15,
       idle_timeout: 30,
     });

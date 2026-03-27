@@ -129,6 +129,7 @@ export default function IncomeExpenseForm({ type, items, onChange, title }: Prop
           />
           <input
             type="number"
+            inputMode="decimal"
             value={newItemAmount}
             onChange={(e) => setNewItemAmount(e.target.value)}
             onKeyPress={handleKeyPress}

@@ -1,18 +1,21 @@
-import { NextResponse } from 'next/server';
-import { SESSION_COOKIE } from '@/lib/auth/cookies';
+import { NextRequest, NextResponse } from 'next/server';
+import { REFRESH_COOKIE, clearAuthCookies } from '@/lib/auth/cookies';
+import { revokeRefreshToken } from '@/lib/auth/refresh-tokens';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const response = NextResponse.json({ success: true });
 
-  response.cookies.set(SESSION_COOKIE, '', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 0,
-    path: '/',
-  });
+  // Révoquer le refresh token en DB si présent
+  const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
+  if (refreshToken) {
+    try {
+      await revokeRefreshToken(refreshToken);
+    } catch {
+      // Ne pas bloquer le logout si la révocation échoue
+    }
+  }
 
-  return response;
+  return clearAuthCookies(response);
 }

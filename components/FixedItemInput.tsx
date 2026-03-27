@@ -106,6 +106,7 @@ export default function FixedItemInput({
           <div className="flex-1 sm:w-32">
             <input
               type="number"
+              inputMode="decimal"
               value={amount}
               onChange={(e) => handleAmountChange(e.target.value)}
               onFocus={() => setIsEditing(true)}

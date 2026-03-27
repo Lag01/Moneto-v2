@@ -10,6 +10,7 @@ import type { SyncError } from './types';
 
 const isClient = typeof window !== 'undefined';
 const FETCH_TIMEOUT_MS = 15_000; // 15 secondes
+let isRefreshing = false;
 
 export function isNeonConfigured(): boolean {
   return true;
@@ -22,9 +23,23 @@ export function isNeonConfigured(): boolean {
  * @param params - Paramètres de l'opération
  * @returns Résultat ou erreur
  */
+async function tryRefreshAccessToken(): Promise<boolean> {
+  if (!isClient || isRefreshing) return false;
+  isRefreshing = true;
+  try {
+    const res = await fetch('/api/auth/refresh', { method: 'POST' });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    isRefreshing = false;
+  }
+}
+
 export async function executeOperation<T = any>(
   operation: NeonProxyRequest['operation'],
-  params: Record<string, any> = {}
+  params: Record<string, any> = {},
+  _isRetry = false
 ): Promise<{ success: boolean; data?: T; error?: SyncError }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -49,6 +64,14 @@ export async function executeOperation<T = any>(
     const result = (await response.json()) as NeonProxyResponse;
 
     if (!result.success) {
+      // Si erreur d'auth et pas déjà un retry, tenter un refresh
+      if (result.error?.code === 'UNAUTHORIZED' && !_isRetry && isClient) {
+        const refreshed = await tryRefreshAccessToken();
+        if (refreshed) {
+          return executeOperation<T>(operation, params, true);
+        }
+      }
+
       return {
         success: false,
         error: {

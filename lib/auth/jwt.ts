@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
+import crypto from 'crypto';
 
 function getSecret() {
   const secret = process.env.JWT_SECRET;
@@ -8,11 +9,12 @@ function getSecret() {
   return new TextEncoder().encode(secret);
 }
 
+// Access token : courte durée (15 minutes)
 export async function signJWT(payload: { userId: string; email: string }): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime('15m')
     .sign(getSecret());
 }
 
@@ -23,4 +25,9 @@ export async function verifyJWT(token: string): Promise<{ userId: string; email:
   } catch {
     return null;
   }
+}
+
+// Refresh token : token opaque (non-JWT) stocké en DB
+export function generateRefreshToken(): string {
+  return crypto.randomBytes(48).toString('hex');
 }

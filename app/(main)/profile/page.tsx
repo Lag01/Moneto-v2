@@ -1,10 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import SyncIndicator from '@/components/sync/SyncIndicator';
+import ConfirmModal from '@/components/ConfirmModal';
 import { formatDate } from '@/lib/financial';
 
 export default function ProfilePage() {
@@ -20,11 +21,16 @@ export default function ProfilePage() {
     }
   }, [user, router]);
 
-  const handleLogout = async () => {
-    if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
-      await logout();
-      router.push('/auth/login');
-    }
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowLogoutConfirm(false);
+    await logout();
+    router.push('/auth/login');
   };
 
   if (!user) {
@@ -168,6 +174,17 @@ export default function ProfilePage() {
 
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Se déconnecter"
+        message="Êtes-vous sûr de vouloir vous déconnecter ? Vos données locales seront conservées."
+        confirmLabel="Se déconnecter"
+        cancelLabel="Annuler"
+        variant="danger"
+        onConfirm={confirmLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </LayoutWithNav>
   );
 }

@@ -173,6 +173,7 @@ export default function PercentageSlider({
               <div className="flex items-center gap-2">
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={localPercentage}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onFocus={() => setIsEditing(true)}
@@ -218,6 +219,7 @@ export default function PercentageSlider({
                 <span className="text-slate-500 dark:text-slate-400 text-sm">Montant :</span>
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={localAmount}
                   onChange={(e) => handleAmountChange(e.target.value)}
                   onFocus={() => setIsEditing(true)}

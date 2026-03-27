@@ -12,8 +12,10 @@ import { useTutorial } from '@/hooks/useTutorial';
 import TutorialWelcomeModal from '@/components/tutorial/TutorialWelcomeModal';
 import TutorialDisclaimerModal from '@/components/tutorial/TutorialDisclaimerModal';
 import RenamePlanModal from '@/components/plans/RenamePlanModal';
+import ConfirmModal from '@/components/ConfirmModal';
 import { RefreshCw } from 'lucide-react';
 import { notifySyncDebug } from '@/lib/toast-notifications';
+import toast from 'react-hot-toast';
 
 const MAX_PLANS = 25;
 
@@ -36,6 +38,8 @@ export default function DashboardPage() {
 
   const [showBetaWarning, setShowBetaWarning] = useState(true);
   const [renamingPlanId, setRenamingPlanId] = useState<string | null>(null);
+  const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
 
   // Tutoriel
   const { showWelcomeModal, showDisclaimerModal, setShowWelcomeModal, startTutorial, startTutorialAfterDisclaimer } = useTutorialContext();
@@ -101,14 +105,56 @@ export default function DashboardPage() {
   };
 
   const handleDeletePlan = (planId: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce plan ?')) {
-      deleteMonthlyPlan(planId);
-    }
+    setDeletingPlanId(planId);
+  };
+
+  const confirmDeletePlan = () => {
+    if (!deletingPlanId) return;
+    const planId = deletingPlanId;
+    setDeletingPlanId(null);
+
+    // Marquer comme "en attente de suppression" (masqué visuellement)
+    setPendingDeleteIds((prev) => new Set(prev).add(planId));
+
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3">
+          <span className="text-sm">Plan supprimé</span>
+          <button
+            onClick={() => {
+              toast.dismiss(t.id);
+              setPendingDeleteIds((prev) => {
+                const next = new Set(prev);
+                next.delete(planId);
+                return next;
+              });
+            }}
+            className="px-3 py-1 text-sm font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+          >
+            Annuler
+          </button>
+        </div>
+      ),
+      { duration: 5000 }
+    );
+
+    // Supprimer réellement après 5s si pas annulé
+    setTimeout(() => {
+      setPendingDeleteIds((prev) => {
+        if (prev.has(planId)) {
+          deleteMonthlyPlan(planId);
+          const next = new Set(prev);
+          next.delete(planId);
+          return next;
+        }
+        return prev;
+      });
+    }, 5200);
   };
 
   // Filtrer les plans tutoriel et trier par date de création (plus récent en premier)
   const sortedPlans = [...monthlyPlans]
-    .filter((plan) => !plan.isTutorial)
+    .filter((plan) => !plan.isTutorial && !pendingDeleteIds.has(plan.id))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Afficher le bouton de rechargement si connecté, aucun plan, et (erreur OU jamais sync)
@@ -374,6 +420,18 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de confirmation de suppression */}
+      <ConfirmModal
+        isOpen={!!deletingPlanId}
+        title="Supprimer ce plan"
+        message="Êtes-vous sûr de vouloir supprimer ce plan ? Cette action est irréversible."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        variant="danger"
+        onConfirm={confirmDeletePlan}
+        onCancel={() => setDeletingPlanId(null)}
+      />
 
       {/* Modal de renommage */}
       {renamingPlanId && (

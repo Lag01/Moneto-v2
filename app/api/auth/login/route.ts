@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSqlClient } from '@/lib/neon/db';
 import { verifyPassword } from '@/lib/auth/password';
-import { signJWT } from '@/lib/auth/jwt';
-import { SESSION_COOKIE } from '@/lib/auth/cookies';
+import { signJWT, generateRefreshToken } from '@/lib/auth/jwt';
+import { SESSION_COOKIE, REFRESH_COOKIE } from '@/lib/auth/cookies';
+import { storeRefreshToken } from '@/lib/auth/refresh-tokens';
 import { checkRateLimit, getClientIp } from '@/lib/auth/rate-limiter';
 
 export const dynamic = 'force-dynamic';
@@ -60,7 +61,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await signJWT({ userId: user.id, email: user.email });
+    const accessToken = await signJWT({ userId: user.id, email: user.email });
+    const refreshToken = generateRefreshToken();
+    await storeRefreshToken(user.id, refreshToken);
 
     const response = NextResponse.json({
       success: true,
@@ -72,11 +75,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    response.cookies.set(SESSION_COOKIE, token, {
+    response.cookies.set(SESSION_COOKIE, accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 15, // 15 minutes
+      path: '/',
+    });
+
+    response.cookies.set(REFRESH_COOKIE, refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 jours
       path: '/',
     });
 

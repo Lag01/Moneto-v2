@@ -222,6 +222,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<NeonProxy
       );
     }
 
+    // Vérifier la taille de la requête (max 1MB)
+    const contentLength = request.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > 1_048_576) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'PAYLOAD_TOO_LARGE',
+            message: 'La requête dépasse la taille maximale autorisée (1MB)',
+          },
+        },
+        { status: 413 }
+      );
+    }
+
     // Parser la requête
     const body = (await request.json()) as NeonProxyRequest;
 

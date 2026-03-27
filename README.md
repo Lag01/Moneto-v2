@@ -305,35 +305,44 @@ graph TB
         Auth["AuthProvider<br/>+ JWT Cookie"]
         Tutorial["TutorialContext"]
         PWA["Service Worker<br/>(next-pwa)"]
+        Offline["OfflineBanner<br/>(navigator.onLine)"]
+        Confirm["ConfirmModal<br/>(suppression, logout)"]
     end
 
     subgraph Server["API Routes (Next.js)"]
-        Middleware["middleware.ts<br/>JWT Verification<br/>+ Rate Limiting"]
-        LoginAPI["POST /api/auth/login<br/>bcrypt + JWT"]
+        Middleware["middleware.ts<br/>JWT Verification<br/>+ Auto Refresh"]
+        LoginAPI["POST /api/auth/login<br/>bcrypt + JWT + Refresh Token"]
         SignupAPI["POST /api/auth/signup<br/>Validation + bcrypt"]
-        LogoutAPI["POST /api/auth/logout"]
+        LogoutAPI["POST /api/auth/logout<br/>Revoke Refresh Token"]
+        RefreshAPI["POST /api/auth/refresh<br/>Token Rotation"]
         MeAPI["GET /api/auth/me"]
-        NeonProxy["POST /api/neon-proxy<br/>Whitelist ops<br/>AES-256-GCM encrypt"]
+        NeonProxy["POST /api/neon-proxy<br/>Whitelist ops<br/>AES-256-GCM encrypt<br/>1MB size limit"]
     end
 
     subgraph Cloud["Cloud"]
-        Neon["Neon PostgreSQL<br/>(monthly_plans, users)"]
+        Neon["Neon PostgreSQL<br/>(monthly_plans, users,<br/>refresh_tokens)"]
     end
 
     UI --> Store
     UI --> Auth
     UI --> Tutorial
-    Auth -->|JWT Cookie| Middleware
+    UI --> Confirm
+    Auth -->|Access Token 15min| Middleware
+    Auth -->|401 → Auto Refresh| RefreshAPI
     Middleware --> LoginAPI
     Middleware --> SignupAPI
     Middleware --> LogoutAPI
+    Middleware --> RefreshAPI
     Middleware --> MeAPI
     Middleware --> NeonProxy
     NeonProxy -->|SSL + Parameterized SQL| Neon
-    Store -->|Sync| NeonProxy
+    RefreshAPI -->|Validate + Rotate| Neon
+    Store -->|Sync + Auto Retry| NeonProxy
 
     classDef security fill:#fef3c7,stroke:#f59e0b
-    class Middleware,NeonProxy security
+    classDef ux fill:#dbeafe,stroke:#3b82f6
+    class Middleware,NeonProxy,RefreshAPI security
+    class Offline,Confirm ux
 ```
 
 ## Security Headers
@@ -344,6 +353,7 @@ L'application configure les headers de securite suivants en production :
 - `Strict-Transport-Security` - Force HTTPS
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy` - Desactive camera, micro, geolocation
+- `Content-Security-Policy` - Protection XSS (self + domaines autorises)
 
 ## 📄 License
 
