@@ -121,6 +121,7 @@ app/
 │   ├── onboarding/         # Creation plan (revenus/depenses)
 │   ├── repartition/        # Allocation en enveloppes
 │   ├── visualisation/      # Graphiques et rapports PDF
+│   ├── settings/           # Page parametres utilisateur
 │   ├── profile/            # Page profil utilisateur
 │   └── report-bug/         # Formulaire Formspree
 ├── api/

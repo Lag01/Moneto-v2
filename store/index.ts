@@ -86,6 +86,9 @@ export interface UserSettings {
   theme: 'light' | 'dark' | 'system';
   hasSeenTutorial: boolean;
   tutorialCompleted: boolean;
+  defaultChart: 'sankey' | 'waterfall';
+  planSortOrder: 'date' | 'name' | 'amount';
+  toastNotificationsEnabled: boolean;
 }
 
 /**
@@ -183,6 +186,9 @@ const defaultUserSettings: UserSettings = {
   theme: 'system',
   hasSeenTutorial: false,
   tutorialCompleted: false,
+  defaultChart: 'sankey',
+  planSortOrder: 'date',
+  toastNotificationsEnabled: true,
 };
 
 /**

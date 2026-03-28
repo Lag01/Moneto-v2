@@ -48,6 +48,15 @@ Application web de gestion financière personnelle basée sur la méthode des en
 - **Clavier numérique** sur mobile pour tous les champs de montant (`inputMode="decimal"`)
 - `.env.example` fourni pour les nouveaux développeurs
 
+### Page Paramètres (V2.19 - mars 2026)
+- **Préférences financières** : devise (EUR, USD, GBP, CHF, CAD), format des nombres (locale), jour de début de mois
+- **Préférences d'affichage** : thème (système/clair/sombre), graphique par défaut (Sankey/Waterfall), tri des plans (date/nom/montant)
+- **Données et stockage** : export JSON complet, import avec validation, suppression de toutes les données locales, statut de synchronisation cloud
+- **Notifications** : activation/désactivation des notifications toast
+- **Toggle graphique** sur la page visualisation (Sankey ou Waterfall)
+- **Tri dynamique** des plans sur le dashboard selon les préférences
+- Paramètres persistés localement (IndexedDB), modifications appliquées immédiatement
+
 ### Tutoriel interactif
 - Modal de bienvenue
 - Tutoriel pas-à-pas avec données d'exemple
@@ -70,4 +79,4 @@ Application web de gestion financière personnelle basée sur la méthode des en
 
 ## Dernière mise à jour
 
-27 mars 2026 - Quick wins UX/sécurité + système de refresh tokens
+28 mars 2026 - Page Paramètres centralisée + export/import + toggle graphique

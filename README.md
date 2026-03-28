@@ -300,8 +300,9 @@ Optimisations :
 ```mermaid
 graph TB
     subgraph Client["Client (Browser)"]
-        UI["Pages Next.js<br/>(dashboard, onboarding,<br/>repartition, visualisation)"]
+        UI["Pages Next.js<br/>(dashboard, onboarding,<br/>repartition, visualisation,<br/>settings)"]
         Store["Zustand Store<br/>+ IndexedDB (localforage)"]
+        Settings["Page Parametres<br/>(devise, theme, tri,<br/>export/import JSON)"]
         Auth["AuthProvider<br/>+ JWT Cookie"]
         Tutorial["TutorialContext"]
         PWA["Service Worker<br/>(next-pwa)"]
@@ -327,6 +328,7 @@ graph TB
     UI --> Auth
     UI --> Tutorial
     UI --> Confirm
+    Settings --> Store
     Auth -->|Access Token 15min| Middleware
     Auth -->|401 → Auto Refresh| RefreshAPI
     Middleware --> LoginAPI

@@ -7,10 +7,10 @@ dayjs.locale('fr');
 /**
  * Formate un montant en euros
  */
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('fr-FR', {
+export function formatCurrency(amount: number, currency: string = 'EUR', locale: string = 'fr-FR'): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'EUR',
+    currency,
   }).format(amount);
 }
 

@@ -152,10 +152,20 @@ export default function DashboardPage() {
     }, 5200);
   };
 
-  // Filtrer les plans tutoriel et trier par date de création (plus récent en premier)
+  // Filtrer les plans tutoriel et trier selon les préférences utilisateur
   const sortedPlans = [...monthlyPlans]
     .filter((plan) => !plan.isTutorial && !pendingDeleteIds.has(plan.id))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .sort((a, b) => {
+      switch (userSettings.planSortOrder) {
+        case 'name':
+          return a.name.localeCompare(b.name, 'fr');
+        case 'amount':
+          return (b.calculatedResults?.totalIncome ?? 0) - (a.calculatedResults?.totalIncome ?? 0);
+        case 'date':
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
 
   // Afficher le bouton de rechargement si connecté, aucun plan, et (erreur OU jamais sync)
   const showReloadButton =

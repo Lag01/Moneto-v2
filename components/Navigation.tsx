@@ -12,6 +12,7 @@ const navItems = [
   { href: '/onboarding', label: 'Entrées / Sorties' },
   { href: '/repartition', label: 'Répartition' },
   { href: '/visualisation', label: 'Visualisation' },
+  { href: '/settings', label: 'Paramètres' },
 ];
 
 export default function Navigation() {

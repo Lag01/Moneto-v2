@@ -13,6 +13,7 @@ const navItems = [
   { href: '/repartition', label: 'Répartition' },
   { href: '/visualisation', label: 'Visualisation' },
   { href: '/profile', label: 'Profil' },
+  { href: '/settings', label: 'Paramètres' },
 ];
 
 export default function MobileNav() {

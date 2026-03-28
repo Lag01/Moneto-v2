@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store';
 import LayoutWithNav from '@/app/(main)/layout-with-nav';
 import SankeyChart from '@/components/SankeyChart';
+import WaterfallChart from '@/components/WaterfallChart';
 import { getPlanSummary } from '@/lib/monthly-plan';
 import { formatCurrency } from '@/lib/financial';
 import { useTutorialContext } from '@/context/TutorialContext';
@@ -14,11 +15,12 @@ import toast from 'react-hot-toast';
 
 export default function VisualisationPage() {
   const router = useRouter();
-  const { monthlyPlans, currentMonthId, setCurrentMonth } = useAppStore();
+  const { monthlyPlans, currentMonthId, setCurrentMonth, userSettings } = useAppStore();
   const { isActive: isTutorialActive } = useTutorialContext();
   const { finishTutorial } = useTutorial();
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [chartType, setChartType] = useState<'sankey' | 'waterfall'>(userSettings.defaultChart);
 
   const currentPlan = monthlyPlans.find((p) => p.id === currentMonthId);
 
@@ -181,9 +183,36 @@ export default function VisualisationPage() {
             </div>
           </div>
 
-          {/* Graphique Sankey */}
+          {/* Sélecteur de graphique */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Graphique :</span>
+            <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
+              {[
+                { value: 'sankey' as const, label: 'Sankey' },
+                { value: 'waterfall' as const, label: 'Waterfall' },
+              ].map((c) => (
+                <button
+                  key={c.value}
+                  onClick={() => setChartType(c.value)}
+                  className={`px-3 py-2 text-sm font-medium transition-colors min-h-[44px] ${
+                    chartType === c.value
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Graphique */}
           <div className="space-y-6 md:space-y-8">
-            <SankeyChart plan={currentPlan} />
+            {chartType === 'sankey' ? (
+              <SankeyChart plan={currentPlan} />
+            ) : (
+              <WaterfallChart plan={currentPlan} />
+            )}
           </div>
 
           {/* Bouton PDF */}
